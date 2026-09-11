@@ -12,7 +12,10 @@ import {
   type SetupDraftEndpointConnection,
   type SetupDraftEndpointModel,
   type SetupDraftRecord,
+  type SetupDraftStartingSettings,
+  type SetupDraftSystemPrompt,
 } from "@/types/discord/setupWizard";
+import type { SystemPromptPresetRow, TomoriPresetRow } from "@/types/db/schema";
 import {
   buildSetupCancelRouteId,
   buildSetupEndpointConnectionRouteId,
@@ -21,10 +24,12 @@ import {
   buildSetupEndpointModelSubmitRouteId,
   buildSetupFinishRouteId,
   buildSetupPoliciesRouteId,
+  buildSetupPoliciesSubmitRouteId,
   buildSetupProviderByokSubmitRouteId,
   buildSetupProviderCatalogSubmitRouteId,
   buildSetupProviderModeRouteId,
   buildSetupSettingsRouteId,
+  buildSetupSettingsSubmitRouteId,
 } from "@/utils/discord/interactions/setupRoutes";
 import type { CustomEndpointApiStyle, SetupCustomEndpointCapability } from "@/types/db/schema";
 import { buildNoticeContainer, validateAndFallbackPanelPayload } from "@/utils/discord/ui/interactionCore";
@@ -39,6 +44,7 @@ import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import { ColorCode } from "@/utils/misc/logger";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { localizer } from "@/utils/text/localizer";
+import { buildLegalDocUrl } from "@/utils/misc/docsUrl";
 import type { ComponentsV2MessagePayload } from "@/utils/discord/ui/componentsV2Limits";
 
 export interface SetupWizardPayloadInput {
@@ -47,6 +53,95 @@ export interface SetupWizardPayloadInput {
   isHosted: boolean;
   nonce: string;
   notice?: string;
+  /**
+   * The live persona and system-prompt catalogs, read once per repaint so the dashboard reflects a
+   * catalog row that has been removed rather than the draft's no-longer-resolvable copy.
+   *
+   * The three states are distinct and all meaningful. `undefined` means there is nothing stored to
+   * resolve. `null` means the read itself failed, which re-pends the step rather than vouching for a
+   * selection nothing could confirm. An object is the resolved catalog set.
+   */
+  settingsCatalogs?: SetupSettingsCatalogs | null;
+}
+
+/** Values a Starting Settings editor can offer, derived from the live catalogs on every open. */
+export interface SetupSettingsCatalogs {
+  personas: Array<{ id: number; name: string; description: string }>;
+  prompts: Array<{ name: string; description: string }>;
+}
+
+/** Discord's maximum option count for a single modal string select. */
+const SETUP_MODAL_SELECT_OPTION_LIMIT = 25;
+
+/** Discord's maximum length for one select option's value, which is compared verbatim when read back. */
+const SETUP_OPTION_VALUE_LIMIT = 100;
+
+/**
+ * Whether both catalogs fit the one select each is rendered into.
+ *
+ * Discord caps a modal's string select at 25 options and these are single-menu rows rather than the
+ * paginated selector, so a catalog past the cap has no renderable form. It fails closed for the
+ * whole step rather than truncating: a trimmed list would silently drop the actor's stored choice,
+ * and the step is edited in one modal, so one over-cap catalog makes the editor unusable either way.
+ */
+export function areSetupSettingsCatalogsRenderable(
+  catalogs: SetupSettingsCatalogs | null,
+): catalogs is SetupSettingsCatalogs {
+  if (!catalogs) return false;
+  // The prompt select also carries the synthetic built-in default.
+  return (
+    catalogs.personas.length <= SETUP_MODAL_SELECT_OPTION_LIMIT &&
+    catalogs.prompts.length + 1 <= SETUP_MODAL_SELECT_OPTION_LIMIT
+  );
+}
+
+/** Humanizer degree to its locale key stem, indexed by the stored degree (0 through 3). */
+const HUMANIZER_KEYS = ["none", "light", "default", "heavy"] as const;
+
+/**
+ * The rows a Starting Settings editor can offer, or null when either catalog could not be read.
+ *
+ * Both come from the database, so a failed read and an empty catalog are indistinguishable here and
+ * both fail closed: the editor refuses rather than silently offering a subset of the presets.
+ */
+export function toSetupSettingsCatalogs(
+  personaPresets: readonly TomoriPresetRow[] | null,
+  promptPresets: readonly SystemPromptPresetRow[] | null,
+  locale: string,
+): SetupSettingsCatalogs | null {
+  if (!personaPresets || !promptPresets) return null;
+  // Option values are compared verbatim against the stored identity, and Discord caps one option's
+  // value length, so a name at the cap would store a value that can never resolve back.
+  if (personaPresets.some((preset) => preset.persona_preset_name.length > SETUP_OPTION_VALUE_LIMIT)) return null;
+  if (promptPresets.some((preset) => preset.system_prompt_preset_name.length > SETUP_OPTION_VALUE_LIMIT)) return null;
+
+  return {
+    personas: personaPresets.map((preset) => ({
+      id: preset.persona_preset_id,
+      name: preset.persona_preset_name,
+      description: preset.persona_preset_desc,
+    })),
+    prompts: promptPresets.map((preset) => ({
+      name: preset.system_prompt_preset_name,
+      description: locale === "ja" && preset.ja_description ? preset.ja_description : preset.system_prompt_preset_desc,
+    })),
+  };
+}
+
+/**
+ * Whether the draft's stored persona and prompt identities still exist in the live catalogs.
+ *
+ * Both are checked together because the step is one unit: a removed row re-pends the whole step
+ * while the actor's other stored values stay in the draft for the next save.
+ */
+export function isSetupStartingSettingsResolvable(
+  settings: SetupDraftStartingSettings,
+  catalogs: SetupSettingsCatalogs,
+): boolean {
+  const { systemPrompt } = settings;
+  if (!catalogs.personas.some((persona) => persona.id === settings.presetId)) return false;
+  if (systemPrompt.kind === "built-in") return true;
+  return catalogs.prompts.some((prompt) => prompt.name === systemPrompt.presetName);
 }
 
 function resolveProviderSummary(draft: SetupDraftRecord, locale: string): string {
@@ -71,24 +166,59 @@ function resolveProviderSummary(draft: SetupDraftRecord, locale: string): string
   return `> ${localizer(locale, "commands.setup.wizard.provider_custom_pending")}`;
 }
 
-function resolveSettingsSummary(draft: SetupDraftRecord, locale: string): string {
-  const settings = draft.startingSettings;
-  if (!settings) {
-    return `> ${localizer(locale, "commands.setup.wizard.settings_pending")}`;
-  }
+function resolveHumanizerLabel(humanizer: number, locale: string): string {
+  return localizer(locale, `commands.setup.humanizer_option_${HUMANIZER_KEYS[humanizer] ?? "default"}_label`);
+}
 
-  const presetName = settings.systemPrompt.kind === "preset" ? settings.systemPrompt.presetName : "Built-in";
-  const tzFormatted = settings.timezoneOffset >= 0 ? `+${settings.timezoneOffset}` : String(settings.timezoneOffset);
+/**
+ * The stored timezone as the dashboard shows it, spelled out so a UTC offset never reads as an
+ * unfinished field.
+ *
+ * This is a display form and must not be fed back into {@link parseSetupTimezoneOffset}: the `UTC`
+ * prefix is prose, and the modal's re-parse of a pre-filled value rejects it. The editor pre-fills
+ * with {@link formatTimezoneOffsetInput} for that reason.
+ */
+function formatTimezoneOffsetDisplay(timezoneOffset: number): string {
+  return timezoneOffset >= 0 ? `UTC+${timezoneOffset}` : `UTC${timezoneOffset}`;
+}
 
-  const line1 = localizer(locale, "commands.setup.wizard.settings_summary_preset", {
-    preset: presetName,
-  });
-  const line2 = localizer(locale, "commands.setup.wizard.settings_summary_details", {
-    humanizer: settings.humanizer,
-    tz: tzFormatted,
-  });
+/** The stored timezone as the editor's own input value, so reopening a saved step parses cleanly. */
+function formatTimezoneOffsetInput(timezoneOffset: number): string {
+  return String(timezoneOffset);
+}
 
-  return `> ${line1}\n> ${line2}`;
+function resolveSettingsSummary(
+  settings: SetupDraftStartingSettings,
+  locale: string,
+  catalogs: SetupSettingsCatalogs | null,
+): string {
+  // A read that failed is not the same claim as a catalog that resolved without the row, so the two
+  // get different wording: the first says the value could not be checked, the second says it is gone.
+  const unresolvedKey = catalogs === null ? "settings_catalog_unavailable" : "settings_persona_unknown";
+  const unresolvedPromptKey = catalogs === null ? "settings_catalog_unavailable" : "settings_prompt_unknown";
+
+  const personaName =
+    catalogs?.personas.find((persona) => persona.id === settings.presetId)?.name ??
+    localizer(locale, `commands.setup.wizard.${unresolvedKey}`);
+  const { systemPrompt } = settings;
+  const promptName =
+    systemPrompt.kind === "built-in"
+      ? localizer(locale, "commands.setup.wizard.settings_built_in_prompt_summary")
+      : (catalogs?.prompts.find((prompt) => prompt.name === systemPrompt.presetName)?.name ??
+        localizer(locale, `commands.setup.wizard.${unresolvedPromptKey}`));
+
+  return [
+    localizer(locale, "commands.setup.wizard.settings_summary_persona", { persona: personaName }),
+    localizer(locale, "commands.setup.wizard.settings_summary_reply_style", {
+      style: resolveHumanizerLabel(settings.humanizer, locale),
+    }),
+    localizer(locale, "commands.setup.wizard.settings_summary_timezone", {
+      tz: formatTimezoneOffsetDisplay(settings.timezoneOffset),
+    }),
+    localizer(locale, "commands.setup.wizard.settings_summary_system_prompt", { prompt: promptName }),
+  ]
+    .map((row) => `> ${row}`)
+    .join("\n");
 }
 
 export function buildSetupWizardPayload(
@@ -104,11 +234,21 @@ export function buildSetupWizardPayload(
     });
   }
 
-  const isComplete = isSetupDraftComplete(draft);
-
   const providerComplete = isSetupDraftProviderAccessComplete(draft.providerAccess);
-  const settingsComplete = draft.startingSettings !== null;
+  // The stored identities are resolved against the live catalogs, so a persona or prompt row removed
+  // since the save re-pends the step here rather than only at the final commit. A catalog read that
+  // failed re-pends it too: the alternative is claiming a selection is complete when nothing could
+  // confirm it, and the two loaders return the same null for "no rows" and "query blew up".
+  const settingsComplete =
+    draft.startingSettings !== null &&
+    input.settingsCatalogs != null &&
+    isSetupStartingSettingsResolvable(draft.startingSettings, input.settingsCatalogs);
   const policiesComplete = draft.policiesAccepted;
+
+  // The catalog-aware verdict governs the whole ready state, not only the step rows. Gating the
+  // finish action on the catalog-blind draft predicate instead would leave it enabled and Primary
+  // beside a step the same panel had just re-pended.
+  const isComplete = isSetupDraftComplete(draft) && settingsComplete;
 
   const total = isHosted ? 3 : 2;
   const done = (isHosted && policiesComplete ? 1 : 0) + (providerComplete ? 1 : 0) + (settingsComplete ? 1 : 0);
@@ -246,7 +386,9 @@ export function buildSetupWizardPayload(
   }
 
   const settingsStatus = settingsComplete ? "✓" : "○";
-  const settingsSummary = resolveSettingsSummary(draft, locale);
+  const settingsSummary = draft.startingSettings
+    ? resolveSettingsSummary(draft.startingSettings, locale, input.settingsCatalogs ?? null)
+    : `> ${localizer(locale, "commands.setup.wizard.settings_pending")}`;
   const settingsButtonLabel = localizer(
     locale,
     settingsComplete ? "commands.setup.wizard.settings_button_edit" : "commands.setup.wizard.settings_button_start",
@@ -637,6 +779,209 @@ export function buildSetupByokModal(
             value: "no",
           },
         ],
+      },
+    ],
+  };
+}
+
+export type SetupSettingsModalField = "persona" | "humanizer" | "timezone" | "system-prompt";
+
+export function buildSetupSettingsModalFieldId(field: SetupSettingsModalField, nonce: string): string {
+  return `${field}_${nonce}`;
+}
+
+/**
+ * The sentinel a stored system prompt carries when the actor chose the built-in default.
+ *
+ * It is a draft identity, never catalog text: the final commit re-resolves it so a preset edited
+ * after the save is written in its current form, and the built-in default writes NULL. A catalog row
+ * named exactly this string would be offered twice and always read back as the built-in default,
+ * which is a catalog-naming accident rather than a state two edits can reach.
+ */
+export const SETUP_SYSTEM_PROMPT_BUILT_IN = "built-in-default";
+
+export function parseSetupSystemPromptChoice(value: string | undefined): SetupDraftSystemPrompt | null {
+  if (!value) return null;
+  if (value === SETUP_SYSTEM_PROMPT_BUILT_IN) return { kind: "built-in" };
+  return { kind: "preset", presetName: value };
+}
+
+/**
+ * The chosen humanizer degree, or null when the submission carried no usable option.
+ *
+ * The value round-trips as a string, so parsing is strict: an off-enum number would otherwise reach
+ * the repository as a degree the reply pipeline does not implement.
+ */
+export function parseSetupHumanizerChoice(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed >= HUMANIZER_KEYS.length) return null;
+  return parsed;
+}
+
+/** The submitted timezone, blank meaning UTC, or null when it is not a usable offset. */
+export function parseSetupTimezoneOffset(value: string | undefined): number | null {
+  const trimmed = value?.trim() ?? "";
+  if (!trimmed) return 0;
+
+  const parsed = Number.parseFloat(trimmed);
+  if (Number.isNaN(parsed) || parsed < -12 || parsed > 14) return null;
+  return Math.round(parsed);
+}
+
+export function buildSetupSettingsModal(
+  locale: string,
+  nonce: string,
+  catalogs: SetupSettingsCatalogs,
+  existing?: SetupDraftStartingSettings | null,
+): { custom_id: string; title: string; components: RawDiscordComponent[] } {
+  const humanizerOptions = HUMANIZER_KEYS.map((key, index) => ({
+    label: safeSelectOptionText(localizer(locale, `commands.setup.humanizer_option_${key}_label`), 100),
+    value: String(index),
+    description: safeSelectOptionText(localizer(locale, `commands.setup.humanizer_option_${key}_desc`), 100),
+    default: existing?.humanizer === index,
+  }));
+
+  // The plan's contract for this modal is that its selects reopen on their placeholders, so the
+  // `default` flags below are a best-effort hint the client is free to ignore rather than a
+  // pre-fill. Only the text input is expected to come back carrying its stored value.
+  const timezoneValue = existing ? formatTimezoneOffsetInput(existing.timezoneOffset) : undefined;
+  const storedPrompt = existing?.systemPrompt;
+
+  return {
+    custom_id: buildSetupSettingsSubmitRouteId({ locale, nonce }),
+    title: safeSelectOptionText(localizer(locale, "commands.setup.wizard.settings_modal_title"), 45),
+    components: [
+      {
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.settings_persona_label"), 45),
+        component: {
+          type: 3,
+          custom_id: buildSetupSettingsModalFieldId("persona", nonce),
+          required: true,
+          placeholder: safeSelectOptionText(
+            localizer(locale, "commands.setup.wizard.settings_persona_placeholder"),
+            100,
+          ),
+          options: catalogs.personas.map((persona) => ({
+            label: safeSelectOptionText(persona.name, 100),
+            value: String(persona.id),
+            description: safeSelectOptionText(persona.description, 100),
+            default: existing?.presetId === persona.id,
+          })),
+        },
+      },
+      {
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.settings_humanizer_label"), 45),
+        component: {
+          type: 3,
+          custom_id: buildSetupSettingsModalFieldId("humanizer", nonce),
+          required: true,
+          placeholder: safeSelectOptionText(
+            localizer(locale, "commands.setup.wizard.settings_humanizer_placeholder"),
+            100,
+          ),
+          options: humanizerOptions,
+        },
+      },
+      {
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.settings_timezone_label"), 45),
+        component: {
+          type: 4,
+          custom_id: buildSetupSettingsModalFieldId("timezone", nonce),
+          style: TextInputStyle.Short,
+          placeholder: safeSelectOptionText(
+            localizer(locale, "commands.setup.wizard.settings_timezone_placeholder"),
+            100,
+          ),
+          max_length: 20,
+          required: false,
+          value: timezoneValue,
+        },
+      },
+      {
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.settings_system_prompt_label"), 45),
+        component: {
+          // The built-in default is not a catalog row, so it is offered as a synthetic first option
+          // and stored as a sentinel rather than as a copy of the read-time default text.
+          type: 3,
+          custom_id: buildSetupSettingsModalFieldId("system-prompt", nonce),
+          required: true,
+          placeholder: safeSelectOptionText(
+            localizer(locale, "commands.setup.wizard.settings_system_prompt_placeholder"),
+            100,
+          ),
+          options: [
+            {
+              label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.settings_built_in_prompt"), 100),
+              value: SETUP_SYSTEM_PROMPT_BUILT_IN,
+              default: storedPrompt?.kind === "built-in",
+            },
+            ...catalogs.prompts.map((prompt) => ({
+              label: safeSelectOptionText(prompt.name, 100),
+              value: safeSelectOptionText(prompt.name, 100),
+              description: safeSelectOptionText(prompt.description, 100),
+              default: storedPrompt?.kind === "preset" && storedPrompt.presetName === prompt.name,
+            })),
+          ],
+        },
+      },
+    ],
+  };
+}
+
+export type SetupPoliciesModalField = "acceptance";
+
+export const SETUP_POLICY_CHOICE_VALUES = ["tos", "privacy"] as const;
+
+export function buildSetupPoliciesModalFieldId(field: SetupPoliciesModalField, nonce: string): string {
+  return `${field}_${nonce}`;
+}
+
+export function buildSetupPoliciesModal(
+  locale: string,
+  nonce: string,
+): { custom_id: string; title: string; components: RawDiscordComponent[] } {
+  const acceptance = localizer(locale, "commands.setup.wizard.policies_modal_acceptance", {
+    terms_url: buildLegalDocUrl(locale, "terms-of-service"),
+    privacy_url: buildLegalDocUrl(locale, "privacy-policy"),
+  });
+
+  return {
+    custom_id: buildSetupPoliciesSubmitRouteId({ locale, nonce }),
+    title: safeSelectOptionText(localizer(locale, "commands.setup.wizard.policies_modal_title"), 45),
+    components: [
+      {
+        type: 10,
+        content: `${localizer(locale, "commands.setup.wizard.policies_modal_context")}\n\n${acceptance}`,
+      },
+      {
+        // 18 is Label. The group sits inside it rather than at the modal root because the type-18
+        // walk in interactionCore is what records a checkbox submission, so a root-level group
+        // would render and then read back as no selection at all.
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.policies_modal_choice_label"), 45),
+        component: {
+          // 22 is CheckboxGroup.
+          type: 22,
+          custom_id: buildSetupPoliciesModalFieldId("acceptance", nonce),
+          min_values: SETUP_POLICY_CHOICE_VALUES.length,
+          max_values: SETUP_POLICY_CHOICE_VALUES.length,
+          required: true,
+          options: [
+            {
+              label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.policies_choice_terms"), 100),
+              value: "tos",
+            },
+            {
+              label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.policies_choice_privacy"), 100),
+              value: "privacy",
+            },
+          ],
+        },
       },
     ],
   };

@@ -20,6 +20,7 @@ import {
 } from "@/utils/discord/interactions/routeRegistry";
 import {
   SETUP_ENDPOINT_API_STYLES,
+  SETUP_POLICY_CHOICE_VALUES,
   buildSetupByokModal,
   buildSetupByokModalFieldId,
   buildSetupCancelledPayload,
@@ -30,8 +31,19 @@ import {
   buildSetupEndpointModelModal,
   buildSetupEndpointModelModalFieldId,
   buildSetupExpiredPayload,
+  buildSetupPoliciesModal,
+  buildSetupPoliciesModalFieldId,
+  buildSetupSettingsModal,
+  buildSetupSettingsModalFieldId,
   buildSetupWizardPayload,
   getSetupCatalogProviderChoices,
+  areSetupSettingsCatalogsRenderable,
+  isSetupStartingSettingsResolvable,
+  parseSetupHumanizerChoice,
+  parseSetupSystemPromptChoice,
+  parseSetupTimezoneOffset,
+  toSetupSettingsCatalogs,
+  type SetupSettingsCatalogs,
 } from "@/utils/discord/ui/setupPanel";
 import { deliverGuardedPanel } from "@/utils/discord/interactions/panelController";
 import {
@@ -54,7 +66,7 @@ import { encryptApiKey } from "@/utils/security/crypto";
 import { parseNonce } from "@/utils/discord/panelRouteCodec";
 import { createNonce, parseLocale } from "@/utils/discord/panelRouteTokens";
 import { isHostedPolicyEnvironment } from "@/utils/misc/hostedPolicy";
-import { serverRepository } from "@/utils/db/repositories";
+import { configRepository, serverRepository } from "@/utils/db/repositories";
 import { getCachedMainPersona } from "@/utils/cache/tomoriStateCache";
 import { localizer } from "@/utils/text/localizer";
 
@@ -73,8 +85,9 @@ export type SetupWizardAction =
   | "dashboard"
   | "cancel"
   | "policies"
-  | "provider"
+  | "policies-submit"
   | "settings"
+  | "settings-submit"
   | "provider-mode"
   | "provider-catalog-submit"
   | "provider-byok-submit"
@@ -88,8 +101,9 @@ const SETUP_WIZARD_ACTIONS = new Set<SetupWizardAction>([
   "dashboard",
   "cancel",
   "policies",
-  "provider",
+  "policies-submit",
   "settings",
+  "settings-submit",
   "provider-mode",
   "provider-catalog-submit",
   "provider-byok-submit",
@@ -155,13 +169,13 @@ export function parseSetupPoliciesRoute(route: ParsedInteractionRoute | string):
   return parsed?.action === "policies" ? parsed : null;
 }
 
-export function buildSetupProviderRouteId(input: { locale: string; nonce: string }): string {
-  return buildSetupRouteId({ action: "provider", locale: input.locale, nonce: input.nonce });
+export function buildSetupPoliciesSubmitRouteId(input: { locale: string; nonce: string }): string {
+  return buildSetupRouteId({ action: "policies-submit", locale: input.locale, nonce: input.nonce });
 }
 
-export function parseSetupProviderRoute(route: ParsedInteractionRoute | string): SetupWizardRoute | null {
+export function parseSetupPoliciesSubmitRoute(route: ParsedInteractionRoute | string): SetupWizardRoute | null {
   const parsed = parseSetupRoute(route);
-  return parsed?.action === "provider" ? parsed : null;
+  return parsed?.action === "policies-submit" ? parsed : null;
 }
 
 export function buildSetupSettingsRouteId(input: { locale: string; nonce: string }): string {
@@ -171,6 +185,15 @@ export function buildSetupSettingsRouteId(input: { locale: string; nonce: string
 export function parseSetupSettingsRoute(route: ParsedInteractionRoute | string): SetupWizardRoute | null {
   const parsed = parseSetupRoute(route);
   return parsed?.action === "settings" ? parsed : null;
+}
+
+export function buildSetupSettingsSubmitRouteId(input: { locale: string; nonce: string }): string {
+  return buildSetupRouteId({ action: "settings-submit", locale: input.locale, nonce: input.nonce });
+}
+
+export function parseSetupSettingsSubmitRoute(route: ParsedInteractionRoute | string): SetupWizardRoute | null {
+  const parsed = parseSetupRoute(route);
+  return parsed?.action === "settings-submit" ? parsed : null;
 }
 
 export function buildSetupProviderModeRouteId(input: { locale: string; nonce: string }): string {
@@ -247,11 +270,98 @@ export function parseSetupFinishRoute(route: ParsedInteractionRoute | string): S
   return parsed?.action === "finish" ? parsed : null;
 }
 
+/**
+ * Names the rejection a settings submission earned, so an out-of-range hour count is told the bound
+ * rather than being described as a non-number.
+ */
+function describeSetupSettingsRejection(rawTimezone: string | undefined, timezoneOffset: number | null): string {
+  const prefix = "commands.setup.wizard.";
+  if (timezoneOffset === null) {
+    const typed = rawTimezone?.trim() ?? "";
+    // Blank is UTC rather than an error, so a rejection here is either unparseable or out of range.
+    const isOutOfRange = typed !== "" && !Number.isNaN(Number.parseFloat(typed));
+    return `${prefix}${isOutOfRange ? "settings_timezone_out_of_range" : "settings_timezone_invalid"}`;
+  }
+  return `${prefix}settings_persona_stale`;
+}
+
 export async function isWorkspaceAlreadySetup(workspaceKey: string): Promise<boolean> {
   const serverId = await serverRepository.loadServerIdByDiscId(workspaceKey);
   if (!serverId) return false;
   const mainPersona = await getCachedMainPersona(workspaceKey);
   return mainPersona !== null;
+}
+
+/**
+ * The live rows the Starting Settings summary resolves its stored identities against.
+ *
+ * `undefined` is "there is nothing stored to resolve" and skips both reads, which is the whole of the
+ * first pass through the wizard. `null` is a read that failed, which the panel deliberately treats
+ * differently from a catalog that resolved and does not contain the stored row.
+ */
+async function readSetupSettingsCatalogs(
+  draft: SetupDraftRecord,
+  locale: string,
+): Promise<SetupSettingsCatalogs | null | undefined> {
+  if (!draft.startingSettings) return undefined;
+  return loadSetupSettingsCatalogs(locale);
+}
+
+/** The same read for a path that needs the catalogs themselves rather than a drift verdict. */
+async function loadSetupSettingsCatalogs(locale: string): Promise<SetupSettingsCatalogs | null> {
+  const [personaPresets, promptPresets] = await Promise.all([
+    configRepository.loadPresetRowsByLocale(locale),
+    configRepository.loadSystemPromptPresets(),
+  ]);
+  return toSetupSettingsCatalogs(personaPresets, promptPresets, locale);
+}
+
+/**
+ * Repaints the wizard from catalogs the caller already holds.
+ *
+ * It exists so that a save path which just resolved those catalogs does not read them a second time,
+ * while still keeping the payload builder out of the individual action arms.
+ */
+async function deliverSetupWizard(
+  interaction: ChatInputCommandInteraction | GlobalRoutableInteraction,
+  draft: SetupDraftRecord,
+  locale: string,
+  nonce: string,
+  options: {
+    method: "update" | "editReply";
+    notice?: string;
+    settingsCatalogs: SetupSettingsCatalogs | null | undefined;
+  },
+): Promise<void> {
+  const payload = buildSetupWizardPayload({
+    draft,
+    locale,
+    isHosted: draft.requiresPolicies,
+    nonce,
+    notice: options.notice,
+    settingsCatalogs: options.settingsCatalogs,
+  });
+  await deliverGuardedPanel(interaction, payload, { locale, method: options.method });
+}
+
+/**
+ * Repaints the wizard, resolving the stored starting settings against the live catalogs first.
+ *
+ * Every repaint goes through here or through {@link deliverSetupWizard} rather than calling the
+ * payload builder directly, because a repaint that skipped the catalog read would show a completed
+ * step for a persona or prompt row that no longer exists.
+ */
+async function repaintSetupWizard(
+  interaction: ChatInputCommandInteraction | GlobalRoutableInteraction,
+  draft: SetupDraftRecord,
+  locale: string,
+  nonce: string,
+  options: { method: "update" | "editReply"; notice?: string },
+): Promise<void> {
+  await deliverSetupWizard(interaction, draft, locale, nonce, {
+    ...options,
+    settingsCatalogs: await readSetupSettingsCatalogs(draft, locale),
+  });
 }
 
 export interface SetupWizardDependencies {
@@ -310,13 +420,7 @@ export async function startSetupWizard(
   };
   (dependencies.storeSetupDraft ?? storeSetupDraft)(nonce, record);
 
-  const payload = buildSetupWizardPayload({
-    draft: record,
-    locale,
-    isHosted: requiresPolicies,
-    nonce,
-  });
-  await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
+  await repaintSetupWizard(interaction, record, locale, nonce, { method: "editReply" });
 }
 
 export const setupInteractionRoute: GlobalInteractionRoute = {
@@ -382,26 +486,172 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
       }
 
       case "dashboard": {
-        const payload = buildSetupWizardPayload({
-          draft,
-          locale,
-          isHosted: draft.requiresPolicies,
-          nonce,
-        });
-        await deliverGuardedPanel(interaction, payload, { locale, method: "update" });
+        await repaintSetupWizard(interaction, draft, locale, nonce, { method: "update" });
         break;
       }
 
-      case "policies":
-      case "provider":
-      case "settings": {
-        if (!interaction.replied && !interaction.deferred) {
-          await interaction.reply({
-            content: localizer(locale, "commands.setup.wizard.step_unavailable"),
-            flags: MessageFlags.Ephemeral,
-          });
+      case "policies": {
+        if (interaction.isModalSubmit()) {
+          return;
         }
-        break;
+        // A policy control on a draft that renders no policy step is forged, so the modal opens
+        // only for the draft's own captured requirement rather than a fresh environment read. The
+        // refusal replies rather than returning silently, because an unanswered component
+        // interaction surfaces as a failed interaction in the client.
+        if (!draft.requiresPolicies) {
+          if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+              content: localizer(locale, "commands.setup.wizard.policies_denied"),
+              flags: MessageFlags.Ephemeral,
+            });
+          }
+          return;
+        }
+        const modalPayload = buildSetupPoliciesModal(locale, nonce);
+        await showRoutedRawModal(interaction, modalPayload);
+        return;
+      }
+
+      case "policies-submit": {
+        if (!interaction.isModalSubmit()) {
+          return;
+        }
+        await acknowledgeModalSubmitForRefresh(interaction);
+
+        if (!draft.requiresPolicies) {
+          await repaintSetupWizard(interaction, draft, locale, nonce, {
+            method: "editReply",
+            notice: localizer(locale, "commands.setup.wizard.policies_denied"),
+          });
+          return;
+        }
+
+        const acceptanceFieldId = buildSetupPoliciesModalFieldId("acceptance", nonce);
+        const acceptedChoices = takeRawModalCheckboxGroupValues(interaction.id, acceptanceFieldId) ?? [];
+
+        // Both documents are required and nothing else is an acceptance, so the submitted set has
+        // to match exactly rather than merely contain what the modal offered.
+        const acceptedEveryDocument =
+          acceptedChoices.length === SETUP_POLICY_CHOICE_VALUES.length &&
+          SETUP_POLICY_CHOICE_VALUES.every((value) => acceptedChoices.includes(value));
+
+        if (!acceptedEveryDocument) {
+          await repaintSetupWizard(interaction, draft, locale, nonce, {
+            method: "editReply",
+            notice: localizer(locale, "commands.setup.wizard.policies_required"),
+          });
+          return;
+        }
+
+        const updated = updateSetupDraft(nonce, actorDiscId, workspaceKey, context, { policiesAccepted: true });
+        // Repainting is conditional on the write landing: a draft that expired across the
+        // acknowledgement round trip has recorded no acceptance, and showing a completed step for it
+        // would claim a legal acceptance that does not exist. The refusal still answers, because the
+        // modal has already closed and a silent return leaves the actor unable to tell whether their
+        // acceptance registered.
+        if (updated.status === "ok") {
+          await repaintSetupWizard(interaction, updated.draft, locale, nonce, { method: "editReply" });
+          return;
+        }
+
+        await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), { locale, method: "editReply" });
+        return;
+      }
+
+      case "settings": {
+        if (interaction.isModalSubmit()) {
+          return;
+        }
+        const catalogs = await loadSetupSettingsCatalogs(locale);
+        if (!areSetupSettingsCatalogsRenderable(catalogs)) {
+          // The catalogs just read are the ones whose unrenderability is being reported, so they are
+          // passed straight through rather than read a second time on this path.
+          await deliverSetupWizard(interaction, draft, locale, nonce, {
+            method: "update",
+            notice: localizer(locale, "commands.setup.wizard.settings_unavailable"),
+            settingsCatalogs: catalogs,
+          });
+          return;
+        }
+        const modalPayload = buildSetupSettingsModal(locale, nonce, catalogs, draft.startingSettings);
+        await showRoutedRawModal(interaction, modalPayload);
+        return;
+      }
+
+      case "settings-submit": {
+        if (!interaction.isModalSubmit()) {
+          return;
+        }
+        await acknowledgeModalSubmitForRefresh(interaction);
+
+        const catalogs = await loadSetupSettingsCatalogs(locale);
+        if (!areSetupSettingsCatalogsRenderable(catalogs)) {
+          await deliverSetupWizard(interaction, draft, locale, nonce, {
+            method: "editReply",
+            notice: localizer(locale, "commands.setup.wizard.settings_unavailable"),
+            settingsCatalogs: catalogs,
+          });
+          return;
+        }
+
+        const selectedPersonaId = takeRawModalSelectValue(
+          interaction.id,
+          buildSetupSettingsModalFieldId("persona", nonce),
+        );
+        const selectedHumanizer = takeRawModalSelectValue(
+          interaction.id,
+          buildSetupSettingsModalFieldId("humanizer", nonce),
+        );
+        // Optional, so it is read defensively like every other optional text input in this file:
+        // Discord omits an empty one from the submission and the lookup then throws.
+        let rawTimezone: string | undefined;
+        try {
+          rawTimezone = interaction.fields.getTextInputValue(buildSetupSettingsModalFieldId("timezone", nonce));
+        } catch {
+          rawTimezone = undefined;
+        }
+        const selectedSystemPrompt = takeRawModalSelectValue(
+          interaction.id,
+          buildSetupSettingsModalFieldId("system-prompt", nonce),
+        );
+
+        const presetId = Number.parseInt(selectedPersonaId ?? "", 10);
+        const humanizer = parseSetupHumanizerChoice(selectedHumanizer);
+        const timezoneOffset = parseSetupTimezoneOffset(rawTimezone);
+        const systemPrompt = parseSetupSystemPromptChoice(selectedSystemPrompt);
+
+        // A submission is rebuilt from the live catalogs rather than trusted: the row it names may
+        // have been removed since the modal opened, and a blank timezone is enforced here too.
+        const nextSettings =
+          Number.isInteger(presetId) &&
+          catalogs.personas.some((persona) => persona.id === presetId) &&
+          humanizer !== null &&
+          timezoneOffset !== null &&
+          systemPrompt !== null
+            ? { presetId, humanizer, timezoneOffset, systemPrompt }
+            : null;
+
+        if (!nextSettings || !isSetupStartingSettingsResolvable(nextSettings, catalogs)) {
+          await repaintSetupWizard(interaction, draft, locale, nonce, {
+            method: "editReply",
+            notice: localizer(locale, describeSetupSettingsRejection(rawTimezone, timezoneOffset)),
+          });
+          return;
+        }
+
+        const updated = updateSetupDraft(nonce, actorDiscId, workspaceKey, context, {
+          startingSettings: nextSettings,
+        });
+        if (updated.status === "ok") {
+          await deliverSetupWizard(interaction, updated.draft, locale, nonce, {
+            method: "editReply",
+            settingsCatalogs: catalogs,
+          });
+          return;
+        }
+
+        await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), { locale, method: "editReply" });
+        return;
       }
 
       case "provider-mode": {
@@ -420,13 +670,9 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
           });
           const updated = readSetupDraft(nonce, actorDiscId, workspaceKey, context);
           if (updated.status === "ok") {
-            const payload = buildSetupWizardPayload({
-              draft: updated.draft,
-              locale,
-              isHosted: draft.requiresPolicies,
-              nonce,
+            await repaintSetupWizard(interaction, updated.draft, locale, nonce, {
+              method: "update",
             });
-            await deliverGuardedPanel(interaction, payload, { locale, method: "update" });
           }
           return;
         }
@@ -468,14 +714,10 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         const curatedProviders = new Set(getSetupCatalogProviderChoices().map((choice) => choice.value));
 
         if (!selectedProvider || !curatedProviders.has(selectedProvider)) {
-          const payload = buildSetupWizardPayload({
-            draft,
-            locale,
-            isHosted: draft.requiresPolicies,
-            nonce,
+          await repaintSetupWizard(interaction, draft, locale, nonce, {
+            method: "editReply",
             notice: localizer(locale, "commands.setup.wizard.provider_invalid"),
           });
-          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
           return;
         }
 
@@ -483,27 +725,19 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         try {
           providerInstance = await ProviderFactory.getProviderByName(selectedProvider);
         } catch {
-          const payload = buildSetupWizardPayload({
-            draft,
-            locale,
-            isHosted: draft.requiresPolicies,
-            nonce,
+          await repaintSetupWizard(interaction, draft, locale, nonce, {
+            method: "editReply",
             notice: localizer(locale, "commands.setup.wizard.provider_validation_failed"),
           });
-          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
           return;
         }
 
         const validation = await providerInstance.validateApiKey(apiKey);
         if (!validation.valid) {
-          const payload = buildSetupWizardPayload({
-            draft,
-            locale,
-            isHosted: draft.requiresPolicies,
-            nonce,
+          await repaintSetupWizard(interaction, draft, locale, nonce, {
+            method: "editReply",
             notice: localizer(locale, "commands.setup.wizard.provider_validation_failed"),
           });
-          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
           return;
         }
 
@@ -519,13 +753,9 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
 
         const updated = readSetupDraft(nonce, actorDiscId, workspaceKey, context);
         if (updated.status === "ok") {
-          const payload = buildSetupWizardPayload({
-            draft: updated.draft,
-            locale,
-            isHosted: draft.requiresPolicies,
-            nonce,
+          await repaintSetupWizard(interaction, updated.draft, locale, nonce, {
+            method: "editReply",
           });
-          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
         }
         break;
       }
@@ -537,14 +767,10 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         await acknowledgeModalSubmitForRefresh(interaction);
 
         if (context === "dm") {
-          const payload = buildSetupWizardPayload({
-            draft,
-            locale,
-            isHosted: draft.requiresPolicies,
-            nonce,
+          await repaintSetupWizard(interaction, draft, locale, nonce, {
+            method: "editReply",
             notice: localizer(locale, "commands.setup.wizard.provider_byok_guild_only"),
           });
-          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
           return;
         }
 
@@ -552,14 +778,10 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         const selectedConfirm = takeRawModalSelectValue(interaction.id, confirmFieldId);
 
         if (selectedConfirm !== "yes" && selectedConfirm !== "no") {
-          const payload = buildSetupWizardPayload({
-            draft,
-            locale,
-            isHosted: draft.requiresPolicies,
-            nonce,
+          await repaintSetupWizard(interaction, draft, locale, nonce, {
+            method: "editReply",
             notice: localizer(locale, "commands.setup.wizard.byok_choice_invalid"),
           });
-          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
           return;
         }
 
@@ -569,25 +791,17 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
           });
           const updated = readSetupDraft(nonce, actorDiscId, workspaceKey, context);
           if (updated.status === "ok") {
-            const payload = buildSetupWizardPayload({
-              draft: updated.draft,
-              locale,
-              isHosted: draft.requiresPolicies,
-              nonce,
+            await repaintSetupWizard(interaction, updated.draft, locale, nonce, {
+              method: "editReply",
             });
-            await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
           }
           return;
         }
 
         // On no, repaint without updating the draft so any prior access stays intact.
-        const payload = buildSetupWizardPayload({
-          draft,
-          locale,
-          isHosted: draft.requiresPolicies,
-          nonce,
+        await repaintSetupWizard(interaction, draft, locale, nonce, {
+          method: "editReply",
         });
-        await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
         return;
       }
 
@@ -618,14 +832,10 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         const validStyles = new Set<string>(SETUP_ENDPOINT_API_STYLES);
 
         if (!selectedApiStyle || !validStyles.has(selectedApiStyle)) {
-          const payload = buildSetupWizardPayload({
-            draft,
-            locale,
-            isHosted: draft.requiresPolicies,
-            nonce,
+          await repaintSetupWizard(interaction, draft, locale, nonce, {
+            method: "editReply",
             notice: localizer(locale, "commands.setup.wizard.custom_endpoint_api_style_invalid"),
           });
-          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
           return;
         }
 
@@ -651,14 +861,10 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         });
 
         if (!probe.ok) {
-          const payload = buildSetupWizardPayload({
-            draft,
-            locale,
-            isHosted: draft.requiresPolicies,
-            nonce,
+          await repaintSetupWizard(interaction, draft, locale, nonce, {
+            method: "editReply",
             notice: localizer(locale, "commands.setup.wizard.custom_endpoint_unreachable"),
           });
-          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
           return;
         }
 
@@ -687,13 +893,9 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
 
         const updated = readSetupDraft(nonce, actorDiscId, workspaceKey, context);
         if (updated.status === "ok") {
-          const payload = buildSetupWizardPayload({
-            draft: updated.draft,
-            locale,
-            isHosted: draft.requiresPolicies,
-            nonce,
+          await repaintSetupWizard(interaction, updated.draft, locale, nonce, {
+            method: "editReply",
           });
-          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
         }
         break;
       }
@@ -726,14 +928,10 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
 
         const modelCode = interaction.fields.getTextInputValue(modelCodeFieldId)?.trim();
         if (!modelCode) {
-          const payload = buildSetupWizardPayload({
-            draft,
-            locale,
-            isHosted: draft.requiresPolicies,
-            nonce,
+          await repaintSetupWizard(interaction, draft, locale, nonce, {
+            method: "editReply",
             notice: localizer(locale, "commands.setup.wizard.custom_endpoint_model_invalid"),
           });
-          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
           return;
         }
 
@@ -748,14 +946,10 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         const rawCapabilities = takeRawModalCheckboxGroupValues(interaction.id, capabilitiesFieldId) ?? [];
         for (const cap of rawCapabilities) {
           if (!setupCustomEndpointCapabilitySchema.safeParse(cap).success) {
-            const payload = buildSetupWizardPayload({
-              draft,
-              locale,
-              isHosted: draft.requiresPolicies,
-              nonce,
+            await repaintSetupWizard(interaction, draft, locale, nonce, {
+              method: "editReply",
               notice: localizer(locale, "commands.setup.wizard.custom_endpoint_model_invalid"),
             });
-            await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
             return;
           }
         }
@@ -774,13 +968,9 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
 
         const updated = readSetupDraft(nonce, actorDiscId, workspaceKey, context);
         if (updated.status === "ok") {
-          const payload = buildSetupWizardPayload({
-            draft: updated.draft,
-            locale,
-            isHosted: draft.requiresPolicies,
-            nonce,
+          await repaintSetupWizard(interaction, updated.draft, locale, nonce, {
+            method: "editReply",
           });
-          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
         }
         break;
       }

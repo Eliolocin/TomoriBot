@@ -23,6 +23,12 @@ beforeAll(async () => {
 const SECRET_KEY_STRING = "super-secret-api-key-do-not-leak";
 const TEST_NONCE = "nonce-abc-12345";
 
+/** The catalog rows the complete-draft fixture stores, so its settings step resolves and reads as done. */
+const COMPLETE_DRAFT_CATALOGS = {
+  personas: [{ id: 1, name: "Lighthouse", description: "A steady, watchful companion." }],
+  prompts: [{ name: "Tomori Default", description: "The standard reply style." }],
+};
+
 function createDraft(overrides: Partial<SetupDraftRecord> = {}): SetupDraftRecord {
   return {
     schemaVersion: SETUP_DRAFT_SCHEMA_VERSION,
@@ -37,23 +43,36 @@ function createDraft(overrides: Partial<SetupDraftRecord> = {}): SetupDraftRecor
   };
 }
 
-function createCompleteDraft(isHosted = false): SetupDraftRecord {
-  return createDraft({
-    requiresPolicies: isHosted,
-    policiesAccepted: isHosted,
-    providerAccess: {
-      mode: "catalog",
-      provider: "openai",
-      encryptedApiKey: Buffer.from(SECRET_KEY_STRING),
-      keyVersion: 1,
-    },
-    startingSettings: {
-      presetId: 1,
-      humanizer: 1,
-      timezoneOffset: 9,
-      systemPrompt: { kind: "preset", presetName: "Tomori Default" },
-    },
-  });
+/**
+ * A draft with every step done, paired with the catalogs its settings step resolves against.
+ *
+ * The two travel together because a completed settings step is only complete against a catalog that
+ * still holds its persona and prompt: building the pair separately once already produced a fixture
+ * that rendered `1 of 2` with an enabled Finish while the test asserted it was ready.
+ */
+function createCompleteDraftInput(isHosted = false): {
+  draft: SetupDraftRecord;
+  settingsCatalogs: typeof COMPLETE_DRAFT_CATALOGS;
+} {
+  return {
+    draft: createDraft({
+      requiresPolicies: isHosted,
+      policiesAccepted: isHosted,
+      providerAccess: {
+        mode: "catalog",
+        provider: "openai",
+        encryptedApiKey: Buffer.from(SECRET_KEY_STRING),
+        keyVersion: 1,
+      },
+      startingSettings: {
+        presetId: COMPLETE_DRAFT_CATALOGS.personas[0].id,
+        humanizer: 1,
+        timezoneOffset: 9,
+        systemPrompt: { kind: "preset", presetName: COMPLETE_DRAFT_CATALOGS.prompts[0].name },
+      },
+    }),
+    settingsCatalogs: COMPLETE_DRAFT_CATALOGS,
+  };
 }
 
 function extractAllText(payload: ReturnType<typeof buildSetupWizardPayload>): string[] {
@@ -151,7 +170,7 @@ describe("setupPanel Components V2 layout and limits", () => {
     expect(finishPendingBtn.style).toBe(ButtonStyle.Secondary);
 
     const completePayload = buildSetupWizardPayload({
-      draft: createCompleteDraft(false),
+      ...createCompleteDraftInput(false),
       locale: "en-US",
       isHosted: false,
       nonce: TEST_NONCE,
@@ -187,10 +206,13 @@ describe("setupPanel Components V2 layout and limits", () => {
     expect(settingsPendingRow.components[0].disabled).toBe(false);
 
     const completeHosted = buildSetupWizardPayload({
-      draft: createCompleteDraft(true),
+      ...createCompleteDraftInput(true),
       locale: "en-US",
       isHosted: true,
       nonce: TEST_NONCE,
+      // A completed settings step resolves its stored identities against the live catalogs, so a
+      // "complete" fixture without them renders as pending.
+      settingsCatalogs: COMPLETE_DRAFT_CATALOGS,
     });
 
     const completeComp = getContainerComponents(completeHosted);
@@ -445,7 +467,7 @@ describe("setupPanel Components V2 layout and limits", () => {
 
   it("never leaks secrets, encrypted buffers, or nonces into rendered text", () => {
     const payload = buildSetupWizardPayload({
-      draft: createCompleteDraft(true),
+      ...createCompleteDraftInput(true),
       locale: "en-US",
       isHosted: true,
       nonce: TEST_NONCE,

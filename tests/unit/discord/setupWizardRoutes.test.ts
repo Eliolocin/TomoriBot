@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
 import {
   ComponentType,
   PermissionsBitField,
@@ -10,11 +10,13 @@ import {
 } from "discord.js";
 import {
   SETUP_DRAFT_SCHEMA_VERSION,
+  isSetupDraftComplete,
   isSetupDraftProviderAccessComplete,
   type SetupDraftRecord,
 } from "@/types/discord/setupWizard";
 import { setupCustomEndpointCapabilitySchema } from "@/types/db/schema";
 import { readSetupDraft, resetSetupDrafts, storeSetupDraft } from "@/utils/discord/interactions/setupDraftStore";
+import * as setupDraftStoreModule from "@/utils/discord/interactions/setupDraftStore";
 import {
   buildSetupCancelRouteId,
   buildSetupDashboardRouteId,
@@ -24,15 +26,20 @@ import {
   buildSetupEndpointModelSubmitRouteId,
   buildSetupFinishRouteId,
   buildSetupPoliciesRouteId,
+  buildSetupPoliciesSubmitRouteId,
   buildSetupProviderByokSubmitRouteId,
   buildSetupProviderCatalogSubmitRouteId,
   buildSetupProviderModeRouteId,
-  buildSetupProviderRouteId,
   buildSetupSettingsRouteId,
+  buildSetupSettingsSubmitRouteId,
+  parseSetupPoliciesSubmitRoute,
   parseSetupProviderByokSubmitRoute,
+  parseSetupSettingsSubmitRoute,
   startSetupWizard,
 } from "@/utils/discord/interactions/setupRoutes";
 import {
+  SETUP_POLICY_CHOICE_VALUES,
+  SETUP_SYSTEM_PROMPT_BUILT_IN,
   buildSetupByokModal,
   buildSetupByokModalFieldId,
   buildSetupCatalogModal,
@@ -41,9 +48,15 @@ import {
   buildSetupEndpointConnectionModalFieldId,
   buildSetupEndpointModelModal,
   buildSetupEndpointModelModalFieldId,
+  buildSetupPoliciesModal,
+  buildSetupPoliciesModalFieldId,
+  buildSetupSettingsModalFieldId,
   buildSetupWizardPayload,
   getSetupCatalogProviderChoices,
 } from "@/utils/discord/ui/setupPanel";
+import { buildLegalDocUrl } from "@/utils/misc/docsUrl";
+import { configRepository } from "@/utils/db/repositories";
+import type { SystemPromptPresetRow, TomoriPresetRow } from "@/types/db/schema";
 import { dispatchGlobalInteraction } from "@/utils/discord/interactions/router";
 import type { GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
@@ -115,7 +128,15 @@ function makeMockInteraction({
     isStringSelectMenu: () => kind === "string",
     values,
     fields: {
-      getTextInputValue: (fieldId: string) => fields[fieldId] ?? "",
+      getTextInputValue: (fieldId: string) => {
+        // Discord omits an empty optional text input from a modal submission, and discord.js then
+        // throws on the lookup, which is why every optional read in the route is guarded. A mock
+        // that returned "" instead would make those guards look unnecessary and hide a real crash.
+        if (!(fieldId in fields)) {
+          throw new Error(`Modal submit field not found: ${fieldId}`);
+        }
+        return fields[fieldId] ?? "";
+      },
     },
     reply: async (payload: unknown) => {
       interaction.replied = true;
@@ -149,6 +170,76 @@ function makeMockInteraction({
   };
 }
 
+/**
+ * The policy step exists only in the hosted environment, so the tests that drive it pin `RUN_ENV`.
+ * A hook owns the restore rather than a per-test block, because the process-wide mutation would
+ * otherwise leak into every other file batched alongside this one.
+ */
+let previousRunEnv: string | undefined;
+
+const PERSONA_PRESET_ROWS = [
+  {
+    persona_preset_id: 1770,
+    persona_preset_name: "Lighthouse",
+    persona_preset_desc: "A steady, watchful companion.",
+    preset_language: "en-US",
+  },
+  {
+    persona_preset_id: 3585,
+    persona_preset_name: "Sparrow",
+    persona_preset_desc: "Quick, curious, and a little bratty.",
+    preset_language: "en-US",
+  },
+] as unknown as TomoriPresetRow[];
+
+const SYSTEM_PROMPT_ROWS = [
+  {
+    system_prompt_preset_id: 1,
+    system_prompt_preset_name: "Tomori Default",
+    system_prompt_preset_desc: "The standard reply style.",
+    ja_description: "標準の返信スタイル。",
+    preset_prompt_text: "You are Tomori.",
+  },
+  {
+    system_prompt_preset_id: 2,
+    system_prompt_preset_name: "Concise",
+    system_prompt_preset_desc: "Shorter replies.",
+    ja_description: null,
+    preset_prompt_text: "Reply briefly.",
+  },
+] as unknown as SystemPromptPresetRow[];
+
+/** Replaces both catalog reads for one test, and returns its own teardown. */
+function stubSettingsCatalogs(
+  personaPresets: readonly TomoriPresetRow[] | null = PERSONA_PRESET_ROWS,
+  promptPresets: readonly SystemPromptPresetRow[] | null = SYSTEM_PROMPT_ROWS,
+) {
+  const personaSpy = spyOn(configRepository, "loadPresetRowsByLocale").mockResolvedValue(
+    personaPresets === null ? null : ([...personaPresets] as never),
+  );
+  const promptSpy = spyOn(configRepository, "loadSystemPromptPresets").mockResolvedValue(
+    promptPresets === null ? null : ([...promptPresets] as never),
+  );
+  return {
+    restore: () => {
+      personaSpy.mockRestore();
+      promptSpy.mockRestore();
+    },
+  };
+}
+
+function makeSettingsDraft(overrides: Partial<SetupDraftRecord> = {}): SetupDraftRecord {
+  return makeDraft({
+    providerAccess: {
+      mode: "catalog",
+      provider: "openai",
+      encryptedApiKey: Buffer.from("secret"),
+      keyVersion: 1,
+    },
+    ...overrides,
+  });
+}
+
 describe("setupWizardRoutes", () => {
   beforeAll(async () => {
     await initializeLocalizer();
@@ -156,6 +247,12 @@ describe("setupWizardRoutes", () => {
 
   beforeEach(() => {
     resetSetupDrafts();
+    previousRunEnv = process.env.RUN_ENV;
+  });
+
+  afterEach(() => {
+    if (previousRunEnv === undefined) delete process.env.RUN_ENV;
+    else process.env.RUN_ENV = previousRunEnv;
   });
 
   it("dispatches through real InteractionRouteRegistry to registered setup route", async () => {
@@ -168,28 +265,6 @@ describe("setupWizardRoutes", () => {
     const handled = await dispatchGlobalInteraction({} as Client, interaction);
     expect(handled).toBe(true);
     expect(interaction.updateCalls.length).toBe(1);
-  });
-
-  it("reaches each step-open seam under its exact dispatcher key", async () => {
-    const nonce = "nonce-seams-1";
-    storeSetupDraft(nonce, makeDraft());
-
-    const seams = [
-      { key: "policies", build: buildSetupPoliciesRouteId },
-      { key: "provider", build: buildSetupProviderRouteId },
-      { key: "settings", build: buildSetupSettingsRouteId },
-    ];
-
-    for (const seam of seams) {
-      const customId = seam.build({ locale: "en-US", nonce });
-      const interaction = makeMockInteraction({ customId });
-
-      const handled = await dispatchGlobalInteraction({} as Client, interaction);
-      expect(handled).toBe(true);
-      expect(interaction.replyCalls.length).toBe(1);
-      const call = interaction.replyCalls[0] as { content: string; flags?: number };
-      expect(call.content).toBe(localizer("en-US", "commands.setup.wizard.step_unavailable"));
-    }
   });
 
   it("acknowledges ephemerally before any slow work in startSetupWizard", async () => {
@@ -1609,6 +1684,918 @@ describe("setupWizardRoutes", () => {
       expect(modalSpy).toHaveBeenCalledTimes(1);
     } finally {
       modalSpy.mockRestore();
+    }
+  });
+
+  it("opens the policies acceptance modal from the dashboard button without touching the draft", async () => {
+    const nonce = "nonce-policies-open";
+    storeSetupDraft(nonce, makeDraft({ requiresPolicies: true }));
+
+    process.env.RUN_ENV = "production";
+    const modalSpy = spyOn(modalModule, "showRoutedRawModal").mockResolvedValue();
+
+    try {
+      const customId = buildSetupPoliciesRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({ customId, kind: "button" });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      expect(modalSpy).toHaveBeenCalledTimes(1);
+      const openedModal = modalSpy.mock.calls[0]?.[1] as { custom_id: string } | undefined;
+      const parsed = parseSetupPoliciesSubmitRoute(openedModal?.custom_id ?? "");
+      expect(parsed?.action).toBe("policies-submit");
+      expect(parsed?.nonce).toBe(nonce);
+
+      const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
+      expect(check.status).toBe("ok");
+      if (check.status === "ok") {
+        expect(check.draft.policiesAccepted).toBe(false);
+      }
+    } finally {
+      modalSpy.mockRestore();
+    }
+  });
+
+  it("builds the policies modal from a text display and a nested required checkbox group", () => {
+    const nonce = "nonce-policies-modal";
+    const modal = buildSetupPoliciesModal("en-US", nonce);
+
+    const rootTypes = modal.components.map((component) => component.type);
+    expect(rootTypes[0]).toBe(10);
+    expect(rootTypes).toContain(18);
+
+    // 18 is the Label wrapper. The walk in interactionCore only records a checkbox submission for
+    // a group nested inside one, so a root-level group would render and read back as no selection.
+    const wrapper = modal.components.find((component) => component.type === 18);
+    const checkboxGroup = wrapper?.component;
+    expect(checkboxGroup?.type).toBe(22);
+    expect(checkboxGroup?.min_values).toBe(2);
+    expect(checkboxGroup?.max_values).toBe(2);
+    expect(checkboxGroup?.required).toBe(true);
+    expect(checkboxGroup?.custom_id).toBe(buildSetupPoliciesModalFieldId("acceptance", nonce));
+    expect(checkboxGroup?.options?.map((option) => option.value)).toEqual([...SETUP_POLICY_CHOICE_VALUES]);
+
+    const textDisplay = modal.components[0] as { content?: string };
+    expect(textDisplay.content).toContain(buildLegalDocUrl("en-US", "terms-of-service"));
+    expect(textDisplay.content).toContain(buildLegalDocUrl("en-US", "privacy-policy"));
+  });
+
+  it("records policy acceptance and completes the draft only when both documents are accepted", async () => {
+    const nonce = "nonce-policies-both";
+    storeSetupDraft(
+      nonce,
+      makeDraft({
+        requiresPolicies: true,
+        providerAccess: {
+          mode: "catalog",
+          provider: "openai",
+          encryptedApiKey: Buffer.from("secret"),
+          keyVersion: 1,
+        },
+        startingSettings: {
+          presetId: 1770,
+          humanizer: 1,
+          timezoneOffset: 9,
+          systemPrompt: { kind: "built-in" },
+        },
+      }),
+    );
+
+    // The repaint resolves the stored settings against the catalogs, so this case needs a fixture
+    // rather than whatever the developer's database happens to hold.
+    const catalogs = stubSettingsCatalogs();
+    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos", "privacy"]);
+
+    process.env.RUN_ENV = "production";
+
+    try {
+      const customId = buildSetupPoliciesSubmitRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({ customId, kind: "modal" });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
+      expect(check.status).toBe("ok");
+      if (check.status === "ok") {
+        expect(check.draft.policiesAccepted).toBe(true);
+        expect(isSetupDraftComplete(check.draft)).toBe(true);
+      }
+
+      expect(interaction.editReplyCalls.length).toBe(1);
+      const repainted = JSON.stringify(interaction.editReplyCalls[0]);
+      // The step has to come back complete in the panel the actor actually sees, not only in the
+      // store: a repaint built from the pre-write record still writes correctly and still posts once.
+      expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.policies_completed"));
+      expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.policies_button_edit"));
+      expect(repainted).not.toContain(localizer("en-US", "commands.setup.wizard.policies_pending"));
+      expect(repainted).not.toContain(localizer("en-US", "commands.setup.wizard.policies_button_start"));
+      expect(repainted).not.toContain(localizer("en-US", "commands.setup.wizard.policies_required"));
+      // The settings row has to resolve too, or the repaint would show it re-pended.
+      expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.settings_button_edit"));
+    } finally {
+      checkboxSpy.mockRestore();
+      catalogs.restore();
+    }
+  });
+
+  it("answers with the expired state when the draft is gone before the write lands", async () => {
+    const nonce = "settings-gone";
+    process.env.RUN_ENV = "production";
+    storeSetupDraft(nonce, makeDraft({ requiresPolicies: true }));
+
+    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos", "privacy"]);
+    const updateSpy = spyOn(setupDraftStoreModule, "updateSetupDraft").mockReturnValue({ status: "missing" });
+
+    try {
+      const customId = buildSetupPoliciesSubmitRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({ customId, kind: "modal" });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      // A verdict of "accepted" for a draft that no longer exists is the one outcome this path must
+      // not invent. The modal has already closed by then, so a silent return would leave the actor
+      // unable to tell whether their acceptance registered.
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+      expect(interaction.editReplyCalls.length).toBe(1);
+      const repainted = JSON.stringify(interaction.editReplyCalls[0]);
+      expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.expired_title"));
+      expect(repainted).not.toContain(localizer("en-US", "commands.setup.wizard.policies_completed"));
+      expect(interaction.updateCalls.length).toBe(0);
+    } finally {
+      updateSpy.mockRestore();
+      checkboxSpy.mockRestore();
+    }
+  });
+
+  it("leaves policies pending and repaints with a notice when only one document is accepted", async () => {
+    const nonce = "nonce-policies-one";
+    storeSetupDraft(nonce, makeDraft({ requiresPolicies: true }));
+
+    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos"]);
+
+    process.env.RUN_ENV = "production";
+
+    try {
+      const customId = buildSetupPoliciesSubmitRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({ customId, kind: "modal" });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
+      expect(check.status).toBe("ok");
+      if (check.status === "ok") {
+        expect(check.draft.policiesAccepted).toBe(false);
+      }
+
+      expect(interaction.editReplyCalls.length).toBe(1);
+      expect(JSON.stringify(interaction.editReplyCalls[0])).toContain(
+        localizer("en-US", "commands.setup.wizard.policies_required"),
+      );
+    } finally {
+      checkboxSpy.mockRestore();
+    }
+  });
+
+  it("leaves policies pending when nothing is selected or the values are unrecognized", async () => {
+    process.env.RUN_ENV = "production";
+
+    for (const submitted of [[], ["forged_policy_value"]]) {
+      const nonce = `nonce-policies-${submitted.length === 0 ? "empty" : "forged"}`;
+      resetSetupDrafts();
+      storeSetupDraft(nonce, makeDraft({ requiresPolicies: true }));
+
+      const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(submitted);
+
+      try {
+        const customId = buildSetupPoliciesSubmitRouteId({ locale: "en-US", nonce });
+        const interaction = makeMockInteraction({ customId, kind: "modal" });
+
+        await dispatchGlobalInteraction({} as Client, interaction);
+
+        const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
+        expect(check.status).toBe("ok");
+        if (check.status === "ok") {
+          expect(check.draft.policiesAccepted).toBe(false);
+        }
+
+        expect(interaction.editReplyCalls.length).toBe(1);
+        expect(JSON.stringify(interaction.editReplyCalls[0])).toContain(
+          localizer("en-US", "commands.setup.wizard.policies_required"),
+        );
+      } finally {
+        checkboxSpy.mockRestore();
+      }
+    }
+  });
+
+  it("refuses a policies route on a draft whose captured step set disagrees with the environment", async () => {
+    const nonce = "nonce-policies-forged";
+    process.env.RUN_ENV = "production";
+
+    // Nothing can flip a live draft's captured requirement: startSetupWizard stores it from the same
+    // predicate the route re-reads, so the reachable form of drift is the environment moving under a
+    // draft, which is what this pins. The submit must not acknowledge, repaint, or write.
+    const draft = makeDraft({ requiresPolicies: false });
+    storeSetupDraft(nonce, draft);
+
+    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos", "privacy"]);
+
+    try {
+      const customId = buildSetupPoliciesSubmitRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({ customId, kind: "modal" });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
+      expect(check.status).toBe("ok");
+      if (check.status === "ok") {
+        expect(check.draft.policiesAccepted).toBe(false);
+      }
+
+      expect(checkboxSpy).not.toHaveBeenCalled();
+      expect(interaction.editReplyCalls.length).toBe(0);
+      expect(interaction.updateCalls.length).toBe(0);
+      expect(interaction.replyCalls.length).toBe(1);
+      expect((interaction.replyCalls[0] as { content: string }).content).toBe(
+        localizer("en-US", "commands.setup.wizard.env_mismatch"),
+      );
+    } finally {
+      checkboxSpy.mockRestore();
+    }
+  });
+
+  it("refuses every policy route on a non-hosted draft instead of leaving it unanswered", async () => {
+    const nonce = "nonce-policies-not-hosted";
+    storeSetupDraft(nonce, makeDraft({ requiresPolicies: false }));
+
+    const modalSpy = spyOn(modalModule, "showRoutedRawModal").mockResolvedValue();
+    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos", "privacy"]);
+
+    try {
+      const opens = [
+        {
+          customId: buildSetupPoliciesRouteId({ locale: "en-US", nonce }),
+          kind: "button" as const,
+          channel: "reply" as const,
+        },
+        {
+          customId: buildSetupPoliciesSubmitRouteId({ locale: "en-US", nonce }),
+          kind: "modal" as const,
+          channel: "editReply" as const,
+        },
+      ];
+
+      for (const open of opens) {
+        const interaction = makeMockInteraction({ customId: open.customId, kind: open.kind });
+
+        await dispatchGlobalInteraction({} as Client, interaction);
+
+        // An unacknowledged component interaction renders as a failed interaction, so both routes
+        // have to answer. A button answers with its own ephemeral reply; a modal submit has already
+        // deferred by then and answers through the repaint channel.
+        const answered = open.channel === "reply" ? interaction.replyCalls[0] : interaction.editReplyCalls[0];
+        expect(answered).toBeDefined();
+        expect(JSON.stringify(answered)).toContain(localizer("en-US", "commands.setup.wizard.policies_denied"));
+        expect(interaction.replyCalls.length + interaction.editReplyCalls.length).toBe(1);
+      }
+
+      expect(modalSpy).not.toHaveBeenCalled();
+      expect(checkboxSpy).not.toHaveBeenCalled();
+
+      const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
+      expect(check.status).toBe("ok");
+      if (check.status === "ok") {
+        expect(check.draft.policiesAccepted).toBe(false);
+      }
+    } finally {
+      checkboxSpy.mockRestore();
+      modalSpy.mockRestore();
+    }
+  });
+
+  it("opens one four-row settings modal with literals 18, 3 and 4 for its nested fields", async () => {
+    const nonce = "settings-open";
+    storeSetupDraft(nonce, makeSettingsDraft());
+    const catalogs = stubSettingsCatalogs();
+
+    const modalSpy = spyOn(modalModule, "showRoutedRawModal").mockResolvedValue();
+
+    try {
+      const customId = buildSetupSettingsRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({ customId, kind: "button" });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      expect(modalSpy).toHaveBeenCalledTimes(1);
+      const openedModal = modalSpy.mock.calls[0]?.[1] as
+        | { custom_id: string; components: Array<{ type: number; component?: { type: number; custom_id?: string } }> }
+        | undefined;
+
+      const parsed = parseSetupSettingsSubmitRoute(openedModal?.custom_id ?? "");
+      expect(parsed?.action).toBe("settings-submit");
+      expect(parsed?.nonce).toBe(nonce);
+
+      const rows = openedModal?.components ?? [];
+      expect(rows.length).toBe(4);
+      for (const row of rows) {
+        // 18 is the Label wrapper, which is what the type-18 walk in interactionCore reads. A row
+        // left at the modal root renders and then submits as no value at all.
+        expect(row.type).toBe(18);
+        expect(row.component).toBeDefined();
+      }
+      expect(rows.map((row) => row.component?.type)).toEqual([3, 3, 4, 3]);
+      expect(rows.map((row) => row.component?.custom_id)).toEqual([
+        buildSetupSettingsModalFieldId("persona", nonce),
+        buildSetupSettingsModalFieldId("humanizer", nonce),
+        buildSetupSettingsModalFieldId("timezone", nonce),
+        buildSetupSettingsModalFieldId("system-prompt", nonce),
+      ]);
+    } finally {
+      modalSpy.mockRestore();
+      catalogs.restore();
+    }
+  });
+
+  it("stores all four settings identities and repaints the completed step", async () => {
+    const nonce = "settings-save";
+    storeSetupDraft(nonce, makeSettingsDraft());
+    const catalogs = stubSettingsCatalogs();
+
+    const selectSpy = spyOn(modalModule, "takeRawModalSelectValue").mockImplementation((_id, fieldId) => {
+      if (fieldId.includes("persona")) return "1770";
+      if (fieldId.includes("humanizer")) return "2";
+      if (fieldId.includes("system-prompt")) return "Tomori Default";
+      return undefined;
+    });
+
+    try {
+      const customId = buildSetupSettingsSubmitRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({
+        customId,
+        kind: "modal",
+        fields: { [buildSetupSettingsModalFieldId("timezone", nonce)]: " +8 " },
+      });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
+      expect(check.status).toBe("ok");
+      if (check.status === "ok") {
+        expect(check.draft.startingSettings).toEqual({
+          presetId: 1770,
+          humanizer: 2,
+          timezoneOffset: 8,
+          systemPrompt: { kind: "preset", presetName: "Tomori Default" },
+        });
+      }
+
+      expect(interaction.editReplyCalls.length).toBe(1);
+      const repainted = JSON.stringify(interaction.editReplyCalls[0]);
+      expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.settings_button_edit"));
+      expect(repainted).toContain("Lighthouse");
+      expect(repainted).toContain("Tomori Default");
+      expect(repainted).not.toContain(localizer("en-US", "commands.setup.wizard.settings_pending"));
+    } finally {
+      selectSpy.mockRestore();
+      catalogs.restore();
+    }
+  });
+
+  it("saves a settings submission that omits the optional timezone field entirely", async () => {
+    const nonce = "omit-timezone";
+    resetSetupDrafts();
+    storeSetupDraft(nonce, makeSettingsDraft());
+    const catalogs = stubSettingsCatalogs();
+
+    const selectSpy = spyOn(modalModule, "takeRawModalSelectValue").mockImplementation((_id, fieldId) => {
+      if (fieldId.includes("persona")) return "1770";
+      if (fieldId.includes("humanizer")) return "1";
+      if (fieldId.includes("system-prompt")) return SETUP_SYSTEM_PROMPT_BUILT_IN;
+      return undefined;
+    });
+
+    try {
+      // Discord omits an empty optional text input from the submission, so a real submit of a blank
+      // timezone arrives with no field at all. This is the only case that reaches the guarded read.
+      const customId = buildSetupSettingsSubmitRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({ customId, kind: "modal", fields: {} });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
+      expect(check.status).toBe("ok");
+      if (check.status === "ok") {
+        expect(check.draft.startingSettings).toEqual({
+          presetId: 1770,
+          humanizer: 1,
+          timezoneOffset: 0,
+          systemPrompt: { kind: "built-in" },
+        });
+      }
+
+      expect(interaction.editReplyCalls.length).toBe(1);
+      const repainted = JSON.stringify(interaction.editReplyCalls[0]);
+      expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.settings_button_edit"));
+      expect(repainted).not.toContain(localizer("en-US", "commands.setup.wizard.settings_timezone_invalid"));
+    } finally {
+      selectSpy.mockRestore();
+      catalogs.restore();
+    }
+  });
+
+  it("defaults a blank timezone to UTC and stores the built-in prompt sentinel, not catalog text", async () => {
+    const nonce = "settings-utc";
+    storeSetupDraft(nonce, makeSettingsDraft());
+    const catalogs = stubSettingsCatalogs();
+
+    const selectSpy = spyOn(modalModule, "takeRawModalSelectValue").mockImplementation((_id, fieldId) => {
+      if (fieldId.includes("persona")) return "3585";
+      if (fieldId.includes("humanizer")) return "0";
+      if (fieldId.includes("system-prompt")) return SETUP_SYSTEM_PROMPT_BUILT_IN;
+      return undefined;
+    });
+
+    try {
+      const customId = buildSetupSettingsSubmitRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({
+        customId,
+        kind: "modal",
+        fields: { [buildSetupSettingsModalFieldId("timezone", nonce)]: "" },
+      });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
+      expect(check.status).toBe("ok");
+      if (check.status === "ok") {
+        expect(check.draft.startingSettings).toEqual({
+          presetId: 3585,
+          humanizer: 0,
+          timezoneOffset: 0,
+          systemPrompt: { kind: "built-in" },
+        });
+        // The draft carries the identity, never a copy of the preset text, so the read-time default
+        // keeps evolving until the commit re-resolves it.
+        expect(JSON.stringify(check.draft.startingSettings)).not.toContain("You are Tomori");
+      }
+
+      const repainted = JSON.stringify(interaction.editReplyCalls[0]);
+      expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.settings_built_in_prompt_summary"));
+      expect(repainted).toContain("UTC+0");
+    } finally {
+      selectSpy.mockRestore();
+      catalogs.restore();
+    }
+  });
+
+  it("rejects an unusable timezone, humanizer, persona or prompt without writing settings", async () => {
+    const rejected = [
+      {
+        persona: "1770",
+        humanizer: "1",
+        prompt: "Tomori Default",
+        timezone: "99",
+        key: "out-of-range",
+        notice: "settings_timezone_out_of_range",
+      },
+      {
+        persona: "1770",
+        humanizer: "1",
+        prompt: "Tomori Default",
+        timezone: "abc",
+        key: "not-a-number",
+        notice: "settings_timezone_invalid",
+      },
+      {
+        persona: "9999",
+        humanizer: "1",
+        prompt: "Tomori Default",
+        timezone: "0",
+        key: "forged-persona",
+        notice: "settings_persona_stale",
+      },
+      {
+        persona: "1770",
+        humanizer: "7",
+        prompt: "Tomori Default",
+        timezone: "0",
+        key: "off-enum-humanizer",
+        notice: "settings_persona_stale",
+      },
+      {
+        persona: "1770",
+        humanizer: "1",
+        prompt: "Removed Prompt",
+        timezone: "0",
+        key: "removed-prompt",
+        notice: "settings_persona_stale",
+      },
+    ];
+
+    for (const submitted of rejected) {
+      const nonce = `reject-${submitted.key}`;
+      resetSetupDrafts();
+      storeSetupDraft(nonce, makeSettingsDraft());
+      const catalogs = stubSettingsCatalogs();
+
+      const selectSpy = spyOn(modalModule, "takeRawModalSelectValue").mockImplementation((_id, fieldId) => {
+        if (fieldId.includes("persona")) return submitted.persona;
+        if (fieldId.includes("humanizer")) return submitted.humanizer;
+        if (fieldId.includes("system-prompt")) return submitted.prompt;
+        return undefined;
+      });
+
+      try {
+        const customId = buildSetupSettingsSubmitRouteId({ locale: "en-US", nonce });
+        const interaction = makeMockInteraction({
+          customId,
+          kind: "modal",
+          fields: { [buildSetupSettingsModalFieldId("timezone", nonce)]: submitted.timezone },
+        });
+
+        await dispatchGlobalInteraction({} as Client, interaction);
+
+        const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
+        expect(check.status).toBe("ok");
+        if (check.status === "ok") {
+          expect(check.draft.startingSettings).toBeNull();
+        }
+
+        expect(interaction.editReplyCalls.length).toBe(1);
+        const repainted = JSON.stringify(interaction.editReplyCalls[0]);
+        expect(repainted).toContain(localizer("en-US", `commands.setup.wizard.${submitted.notice}`));
+        expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.settings_pending"));
+      } finally {
+        selectSpy.mockRestore();
+        catalogs.restore();
+      }
+    }
+  });
+
+  it("keeps the timezone editable by re-parsing the exact value the editor pre-fills", async () => {
+    for (const saved of [0, 8, -5, 14]) {
+      const nonce = `roundtrip-${saved < 0 ? "neg" : ""}${Math.abs(saved)}`;
+      resetSetupDrafts();
+      storeSetupDraft(nonce, makeSettingsDraft());
+
+      const catalogs = stubSettingsCatalogs();
+      const selectSpy = spyOn(modalModule, "takeRawModalSelectValue").mockImplementation((_id, fieldId) => {
+        if (fieldId.includes("persona")) return "1770";
+        if (fieldId.includes("humanizer")) return "1";
+        if (fieldId.includes("system-prompt")) return SETUP_SYSTEM_PROMPT_BUILT_IN;
+        return undefined;
+      });
+      const modalSpy = spyOn(modalModule, "showRoutedRawModal").mockResolvedValue();
+
+      try {
+        const openId = buildSetupSettingsRouteId({ locale: "en-US", nonce });
+        await dispatchGlobalInteraction({} as Client, makeMockInteraction({ customId: openId, kind: "button" }));
+
+        // The value the editor itself would pre-fill on the second open, taken from the modal it
+        // built at the first save rather than from the formatter directly.
+        const firstModal = modalSpy.mock.calls[0]?.[1] as
+          | { components: Array<{ component?: { type: number; value?: string } }> }
+          | undefined;
+        const firstTimezoneRow = firstModal?.components.find((row) => row.component?.type === 4);
+
+        const submitId = buildSetupSettingsSubmitRouteId({ locale: "en-US", nonce });
+        await dispatchGlobalInteraction(
+          {} as Client,
+          makeMockInteraction({
+            customId: submitId,
+            kind: "modal",
+            fields: { [buildSetupSettingsModalFieldId("timezone", nonce)]: String(saved) },
+          }),
+        );
+
+        const saved1 = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
+        expect(saved1.status).toBe("ok");
+        if (saved1.status === "ok") {
+          expect(saved1.draft.startingSettings?.timezoneOffset).toBe(saved);
+        }
+
+        // Reopen: the text input must come back pre-filled with a value that parses to the same
+        // offset, which a "UTC+8" style display form would not.
+        modalSpy.mockClear();
+        await dispatchGlobalInteraction({} as Client, makeMockInteraction({ customId: openId, kind: "button" }));
+        const secondModal = modalSpy.mock.calls[0]?.[1] as
+          | { components: Array<{ component?: { type: number; value?: string } }> }
+          | undefined;
+        const prefilled = secondModal?.components.find((row) => row.component?.type === 4)?.component?.value;
+
+        expect(prefilled).toBe(String(saved));
+        expect(firstTimezoneRow?.component?.value).toBeUndefined();
+
+        // And resubmitting that pre-filled value unchanged must save rather than reject.
+        await dispatchGlobalInteraction(
+          {} as Client,
+          makeMockInteraction({
+            customId: submitId,
+            kind: "modal",
+            fields: { [buildSetupSettingsModalFieldId("timezone", nonce)]: prefilled ?? "" },
+          }),
+        );
+
+        const saved2 = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
+        expect(saved2.status).toBe("ok");
+        if (saved2.status === "ok") {
+          expect(saved2.draft.startingSettings?.timezoneOffset).toBe(saved);
+        }
+      } finally {
+        modalSpy.mockRestore();
+        selectSpy.mockRestore();
+        catalogs.restore();
+      }
+    }
+  });
+
+  it("re-pends the step when the stored persona has left the live catalog", async () => {
+    const nonce = "drift-persona-gone";
+    const removedField = "persona";
+    const summaryKey = "commands.setup.wizard.settings_summary_persona";
+    const summaryVariable = "persona";
+    const stored = {
+      presetId: 1770,
+      humanizer: 1,
+      timezoneOffset: 9,
+      systemPrompt: { kind: "preset" as const, presetName: "Tomori Default" },
+    };
+    resetSetupDrafts();
+    storeSetupDraft(nonce, makeDraft({ startingSettings: { ...stored } }));
+
+    const personaSpy = spyOn(configRepository, "loadPresetRowsByLocale").mockResolvedValue([
+      PERSONA_PRESET_ROWS[1],
+    ] as never);
+    const promptSpy = spyOn(configRepository, "loadSystemPromptPresets").mockResolvedValue([
+      ...SYSTEM_PROMPT_ROWS,
+    ] as never);
+
+    try {
+      // Read back through the spied method first: if some earlier case left its own spy installed,
+      // the fixture below would be silently ignored and this test would pass against the real
+      // catalog instead of the one it declared.
+      const personaRows = await configRepository.loadPresetRowsByLocale("en-US");
+      expect(personaRows?.map((row) => row.persona_preset_id)).toEqual([3585]);
+
+      const customId = buildSetupDashboardRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({ customId, kind: "button" });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      expect(personaSpy).toHaveBeenCalledTimes(2);
+      expect(interaction.updateCalls.length).toBe(1);
+      const repainted = JSON.stringify(interaction.updateCalls[0]);
+      // The step re-pends while the removed row reads as unavailable and every other stored value
+      // keeps resolving, so which catalog drifted is visible in the panel itself.
+      expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.settings_button_start"));
+      expect(repainted).toContain(
+        `> ${localizer("en-US", summaryKey, {
+          [summaryVariable]: localizer("en-US", `commands.setup.wizard.settings_${removedField}_unknown`),
+        })}`,
+      );
+
+      // A removed row re-pends the step without discarding the actor's other stored values.
+      const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
+      expect(check.status).toBe("ok");
+      if (check.status === "ok") {
+        expect(check.draft.startingSettings).toEqual(stored);
+      }
+    } finally {
+      personaSpy.mockRestore();
+      promptSpy.mockRestore();
+    }
+  });
+
+  it("re-pends the step when the stored system prompt has left the live catalog", async () => {
+    const nonce = "drift-prompt-gone";
+    const removedField = "prompt";
+    const summaryKey = "commands.setup.wizard.settings_summary_system_prompt";
+    const summaryVariable = "prompt";
+    const stored = {
+      presetId: 1770,
+      humanizer: 1,
+      timezoneOffset: 9,
+      systemPrompt: { kind: "preset" as const, presetName: "Tomori Default" },
+    };
+    resetSetupDrafts();
+    storeSetupDraft(nonce, makeDraft({ startingSettings: { ...stored } }));
+
+    const personaSpy = spyOn(configRepository, "loadPresetRowsByLocale").mockResolvedValue([
+      ...PERSONA_PRESET_ROWS,
+    ] as never);
+    const promptSpy = spyOn(configRepository, "loadSystemPromptPresets").mockResolvedValue([
+      SYSTEM_PROMPT_ROWS[1],
+    ] as never);
+
+    try {
+      const promptRows = await configRepository.loadSystemPromptPresets();
+      expect(promptRows?.map((row) => row.system_prompt_preset_name)).toEqual(["Concise"]);
+
+      const customId = buildSetupDashboardRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({ customId, kind: "button" });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      expect(promptSpy).toHaveBeenCalledTimes(2);
+      expect(interaction.updateCalls.length).toBe(1);
+      const repainted = JSON.stringify(interaction.updateCalls[0]);
+      // The step re-pends while the removed row reads as unavailable and every other stored value
+      // keeps resolving, so which catalog drifted is visible in the panel itself.
+      expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.settings_button_start"));
+      expect(repainted).toContain(
+        `> ${localizer("en-US", summaryKey, {
+          [summaryVariable]: localizer("en-US", `commands.setup.wizard.settings_${removedField}_unknown`),
+        })}`,
+      );
+
+      const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
+      expect(check.status).toBe("ok");
+      if (check.status === "ok") {
+        expect(check.draft.startingSettings).toEqual(stored);
+      }
+    } finally {
+      personaSpy.mockRestore();
+      promptSpy.mockRestore();
+    }
+  });
+
+  it("refuses to open the settings editor when a catalog read fails", async () => {
+    const nonce = "no-catalog-read";
+    storeSetupDraft(nonce, makeDraft());
+    const catalogs = stubSettingsCatalogs(null, null);
+
+    const modalSpy = spyOn(modalModule, "showRoutedRawModal").mockResolvedValue();
+
+    try {
+      const customId = buildSetupSettingsRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({ customId, kind: "button" });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      expect(modalSpy).not.toHaveBeenCalled();
+      expect(interaction.updateCalls.length).toBe(1);
+      expect(JSON.stringify(interaction.updateCalls[0])).toContain(
+        localizer("en-US", "commands.setup.wizard.settings_unavailable"),
+      );
+    } finally {
+      modalSpy.mockRestore();
+      catalogs.restore();
+    }
+  });
+
+  it("refuses to open the settings editor when a catalog overflows the modal select cap", async () => {
+    const nonce = "over-cap-catalog";
+    storeSetupDraft(nonce, makeDraft());
+
+    // 25 prompts plus the synthetic built-in default is one option past Discord's cap for a single
+    // string select, and these selects are not the paginated selector.
+    const tooManyPrompts = Array.from({ length: 25 }, (_, index) => ({
+      system_prompt_preset_id: index + 1,
+      system_prompt_preset_name: `Preset ${index + 1}`,
+      system_prompt_preset_desc: "A reply style.",
+      ja_description: null,
+      preset_prompt_text: "Prompt text.",
+    })) as unknown as SystemPromptPresetRow[];
+
+    const catalogs = stubSettingsCatalogs(PERSONA_PRESET_ROWS, tooManyPrompts);
+    const modalSpy = spyOn(modalModule, "showRoutedRawModal").mockResolvedValue();
+
+    try {
+      const customId = buildSetupSettingsRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({ customId, kind: "button" });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      expect(modalSpy).not.toHaveBeenCalled();
+      expect(interaction.updateCalls.length).toBe(1);
+      expect(JSON.stringify(interaction.updateCalls[0])).toContain(
+        localizer("en-US", "commands.setup.wizard.settings_unavailable"),
+      );
+    } finally {
+      modalSpy.mockRestore();
+      catalogs.restore();
+    }
+  });
+
+  it("says a value could not be checked, not that it is gone, when the catalog read fails", async () => {
+    const nonce = "catalog-unreadable";
+    resetSetupDrafts();
+    storeSetupDraft(
+      nonce,
+      makeDraft({
+        startingSettings: {
+          presetId: 1770,
+          humanizer: 1,
+          timezoneOffset: 9,
+          systemPrompt: { kind: "preset", presetName: "Tomori Default" },
+        },
+      }),
+    );
+
+    const catalogs = stubSettingsCatalogs(null, null);
+
+    try {
+      const customId = buildSetupDashboardRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({ customId, kind: "button" });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      const repainted = JSON.stringify(interaction.updateCalls[0]);
+      // A read that failed did not establish that the row is absent, so it must not say so.
+      expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.settings_catalog_unavailable"));
+      expect(repainted).not.toContain(localizer("en-US", "commands.setup.wizard.settings_persona_unknown"));
+      expect(repainted).not.toContain(localizer("en-US", "commands.setup.wizard.settings_prompt_unknown"));
+      expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.settings_button_start"));
+    } finally {
+      catalogs.restore();
+    }
+  });
+
+  it("keeps the finish action disabled when a settings row re-pends, and enabled when it resolves", async () => {
+    const build = (presetId: number) =>
+      makeDraft({
+        providerAccess: {
+          mode: "catalog",
+          provider: "openai",
+          encryptedApiKey: Buffer.from("secret"),
+          keyVersion: 1,
+        },
+        startingSettings: {
+          presetId,
+          humanizer: 1,
+          timezoneOffset: 9,
+          systemPrompt: { kind: "built-in" },
+        },
+      });
+
+    // 1770 resolves in the fixture, 9999 does not, so the two renders differ only in whether the
+    // stored persona still exists. The whole ready state has to follow that, not just the step row.
+    for (const [label, presetId, settingsResolve] of [
+      ["resolved", 1770, true],
+      ["drifted", 9999, false],
+    ] as const) {
+      const nonce = `finish-${label}`;
+      resetSetupDrafts();
+      storeSetupDraft(nonce, build(presetId));
+      const catalogs = stubSettingsCatalogs();
+
+      try {
+        const customId = buildSetupDashboardRouteId({ locale: "en-US", nonce });
+        const interaction = makeMockInteraction({ customId, kind: "button" });
+
+        await dispatchGlobalInteraction({} as Client, interaction);
+
+        const repainted = JSON.stringify(interaction.updateCalls[0]);
+        expect(repainted).toContain(
+          localizer("en-US", `commands.setup.wizard.settings_button_${settingsResolve ? "edit" : "start"}`),
+        );
+        // A panel that reads "1 of 2" while offering an enabled Finish contradicts itself.
+        expect(repainted).toContain(
+          `"label":"${localizer("en-US", "commands.setup.wizard.finish_label")}","disabled":${settingsResolve ? "false" : "true"}`,
+        );
+      } finally {
+        catalogs.restore();
+      }
+    }
+  });
+
+  it("re-pends the settings step on an unrelated repaint, not only on the dashboard", async () => {
+    const nonce = "drift-on-provider";
+    resetSetupDrafts();
+    storeSetupDraft(
+      nonce,
+      makeDraft({
+        startingSettings: {
+          presetId: 1770,
+          humanizer: 1,
+          timezoneOffset: 9,
+          systemPrompt: { kind: "preset", presetName: "Tomori Default" },
+        },
+      }),
+    );
+
+    const personaSpy = spyOn(configRepository, "loadPresetRowsByLocale").mockResolvedValue([
+      PERSONA_PRESET_ROWS[1],
+    ] as never);
+    const promptSpy = spyOn(configRepository, "loadSystemPromptPresets").mockResolvedValue([
+      ...SYSTEM_PROMPT_ROWS,
+    ] as never);
+
+    try {
+      // Every repaint resolves the catalogs, so a step that has drifted reads as pending even on a
+      // repaint that has nothing to do with settings.
+      const customId = buildSetupProviderModeRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({ customId, kind: "string", values: ["custom-endpoint"] });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      expect(interaction.updateCalls.length).toBe(1);
+      const repainted = JSON.stringify(interaction.updateCalls[0]);
+      expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.settings_button_start"));
+      expect(repainted).not.toContain(localizer("en-US", "commands.setup.wizard.settings_button_edit"));
+    } finally {
+      personaSpy.mockRestore();
+      promptSpy.mockRestore();
     }
   });
 });
