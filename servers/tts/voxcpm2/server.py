@@ -31,8 +31,6 @@ NORMALIZE = os.getenv("VOXCPM2_NORMALIZE", "0").lower() in {"1", "true", "yes", 
 RETRY_BADCASE = os.getenv("VOXCPM2_RETRY_BADCASE", "1").lower() in {"1", "true", "yes", "on"}
 RETRY_BADCASE_MAX_TIMES = int(os.getenv("VOXCPM2_RETRY_BADCASE_MAX_TIMES", "3"))
 RETRY_BADCASE_RATIO_THRESHOLD = float(os.getenv("VOXCPM2_RETRY_BADCASE_RATIO_THRESHOLD", "6.0"))
-SEED_RAW = os.getenv("VOXCPM2_SEED", "").strip()
-SEED = int(SEED_RAW) if SEED_RAW else None
 
 model = None
 model_lock = threading.Lock()
@@ -153,7 +151,6 @@ def synthesize(payload: SynthesizeRequest) -> Response:
             "retry_badcase": RETRY_BADCASE,
             "retry_badcase_max_times": RETRY_BADCASE_MAX_TIMES,
             "retry_badcase_ratio_threshold": RETRY_BADCASE_RATIO_THRESHOLD,
-            "seed": SEED,
         }
 
         mode = "voice-design" if payload.instruct and not has_ref_audio else "zero-shot"
