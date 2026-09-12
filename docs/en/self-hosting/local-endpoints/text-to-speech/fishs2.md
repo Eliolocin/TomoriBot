@@ -39,12 +39,27 @@ bash servers/tts/fishs2/install-fishs2.sh
 servers/tts/fishs2/.venv/bin/python servers/tts/fishs2/server.py
 ```
 
-The installer:
+The installer uses a reviewed runtime commit and model revision by default. It does not update a
+checkout from a moving branch during a normal reinstall. The installer:
 
-1. clones `Imagilux/fish-speech` into `servers/tts/fishs2/fish-speech/`;
+1. clones `Imagilux/fish-speech` into `servers/tts/fishs2/fish-speech/` and checks out the pinned runtime commit;
 2. creates the isolated `.venv`;
 3. installs Fish Speech plus the TomoriBot wrapper dependencies; and
-4. downloads `Imagilux/fishaudio-s2-pro` into `fish-speech/checkpoints/fish-speech-s2-pro-int8/`.
+4. downloads the pinned `Imagilux/fishaudio-s2-pro` revision into `fish-speech/checkpoints/fish-speech-s2-pro-int8/`.
+
+The reviewed defaults are runtime commit
+`2225e924e7d35cc0a1d24dbc67cd1819e6cf429f` and model revision
+`9706ff036580881d87cc09465dd10014527bc481`.
+
+To deliberately update or test another upstream revision, set `FISH_S2_RUNTIME_REF` and
+`FISH_S2_MODEL_REVISION` before running the installer. For a convenience update to upstream
+`main`, set `FISH_S2_UPDATE=1`; this is an explicit opt-in and uses `FISH_S2_UPDATE_REF` and
+`FISH_S2_UPDATE_MODEL_REVISION` when provided. Record any revision used for a deployment so it can
+be reproduced later.
+
+`FISH_S2_RUNTIME_REPOSITORY` can point at a reviewed mirror when required. `FISH_S2_MODEL_ID` and
+`FISH_S2_MODEL_REVISION` select the Hugging Face repository and immutable revision used by the
+installer.
 
 The Hugging Face model is gated. Accept its license on Hugging Face first. If the download asks for authentication, run:
 
@@ -65,7 +80,16 @@ Fish Audio officially documents Linux/WSL for local S2 inference, so WSL is pref
 
 If an upstream Fish Speech dependency fails to build on native Windows, use WSL instead.
 
-The TomoriBot wrapper listens on `http://127.0.0.1:8015`. Internally it starts Fish Speech's own API server on port `8025` and translates TomoriBot's `/synthesize` request into Fish's MessagePack API. This keeps Fish's inference implementation upstream while preserving TomoriBot's common TTS endpoint contract.
+The TomoriBot wrapper listens on `http://127.0.0.1:8015` by default. Internally it starts Fish
+Speech's own API server on port `8025` and translates TomoriBot's `/synthesize` request into Fish's
+MessagePack API. This keeps Fish's inference implementation upstream while preserving TomoriBot's
+common TTS endpoint contract.
+
+The wrapper binds to loopback by default. If `TOMORI_TTS_HOST` is changed to a non-loopback address,
+set `FISH_S2_API_KEY` and use the same value as the custom endpoint API key in TomoriBot. The
+wrapper then requires `Authorization: Bearer <key>` for `/health` and `/synthesize`. An unauthenticated
+remote bind is available only with the explicit `FISH_S2_ALLOW_INSECURE_REMOTE=1` opt-in and is not
+recommended.
 
 ## Register in TomoriBot
 
@@ -76,6 +100,7 @@ In `/providers`, choose **Add New Custom Endpoint** and configure:
 - Endpoint URL: `http://127.0.0.1:8015`
 - Voice Source Mode: `Clone`
 - Script Markup: `Bracket Tags`
+- API key: leave empty for the default loopback setup. If bearer auth is enabled, enter the exact `FISH_S2_API_KEY` value.
 
 Then add the endpoint's model entry and activate it through `/config` under Models > Switch Models.
 
@@ -105,8 +130,15 @@ Because the endpoint uses `Bracket Tags` markup, TomoriBot preserves these tags 
 |---|---|---|
 | `FISH_SPEECH_DIR` | `servers/tts/fishs2/fish-speech` | Fish Speech runtime directory |
 | `FISH_S2_MODEL_DIR` | `fish-speech/checkpoints/fish-speech-s2-pro-int8` | S2 Pro checkpoint directory |
+| `FISH_S2_MODEL_ID` | `Imagilux/fishaudio-s2-pro` | Model repository and health metadata label for the configured checkpoint |
 | `TOMORI_TTS_HOST` | `127.0.0.1` | TomoriBot wrapper bind address |
-| `TOMORI_TTS_PORT` | `8015` | TomoriBot wrapper port |
+| `FISH_S2_PORT` | `8015` | Fish wrapper port; falls back to `TOMORI_TTS_PORT` when unset |
+| `TOMORI_TTS_PORT` | unset | Backward-compatible shared port override |
+| `FISH_S2_API_KEY` | unset | Optional bearer token, also required for authenticated remote binds |
+| `TOMORI_TTS_API_KEY` | unset | Shared bearer-token fallback when `FISH_S2_API_KEY` is unset |
+| `FISH_S2_ALLOW_INSECURE_REMOTE` | `0` | Explicitly allow a non-loopback bind without a bearer token |
+| `FISH_S2_MAX_REF_AUDIO_BYTES` | `10485760` | Maximum decoded reference WAV size |
+| `TOMORI_TTS_MAX_REF_AUDIO_BYTES` | unset | Shared decoded reference-audio limit fallback |
 | `FISH_S2_UPSTREAM_HOST` | `127.0.0.1` | Internal Fish API bind address |
 | `FISH_S2_UPSTREAM_PORT` | `8025` | Internal Fish API port |
 | `FISH_S2_COMPILE` | `0` | Enable Fish Speech `torch.compile`; upstream notes that compile is not supported on native Windows/macOS without additional setup |
@@ -118,10 +150,19 @@ Because the endpoint uses `Bracket Tags` markup, TomoriBot preserves these tags 
 | `FISH_S2_MAX_NEW_TOKENS` | `1024` | Maximum semantic tokens generated per request |
 | `FISH_S2_USE_MEMORY_CACHE` | `on` | Cache encoded reference voices in the Fish runtime |
 | `TOMORI_TTS_MAX_TEXT_CHARS` | `2000` | Maximum script length accepted by the wrapper |
+| `FISH_S2_STARTUP_TIMEOUT_SECONDS` | `180` | Maximum time to wait for the nested Fish API |
+| `FISH_S2_SYNTHESIS_TIMEOUT_SECONDS` | `240` | Maximum time to wait for one upstream synthesis request |
+| `FISH_S2_LAUNCH_TIMEOUT_MS` | `240000` | Launcher JSON health readiness timeout |
+
+Reference audio must be a non-empty, uncompressed PCM RIFF/WAVE file. The decoded size limit is
+checked before inference to prevent an oversized base64 request from consuming unbounded memory.
 
 ## Use another S2 Pro checkpoint
 
-Set `FISH_S2_MODEL_DIR` before starting the wrapper. For example, a 24 GB+ GPU can use the official BF16 checkpoint downloaded from `fishaudio/s2-pro`.
+Set `FISH_S2_MODEL_DIR` and `FISH_S2_MODEL_ID` before starting the wrapper. For example, a 24 GB+
+GPU can use the official BF16 checkpoint downloaded from `fishaudio/s2-pro`. The health response
+reports the configured model ID and directory rather than claiming that every checkpoint is the
+default INT8 model.
 
 The checkpoint directory must contain the Fish model files and `codec.pth` expected by the selected Fish Speech runtime.
 

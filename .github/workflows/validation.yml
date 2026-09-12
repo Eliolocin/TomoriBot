@@ -131,3 +131,25 @@ jobs:
         # runTests.ts detects POSTGRES_PASSWORD, provisions a disposable
         # tomoribot_test_<id> database, injects TEST_DB_READY=1, and drops
         # the database after the suite completes (or on failure).
+
+  validate-fish-sidecar:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install Fish sidecar test dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/fish-s2-test-venv"
+          "$RUNNER_TEMP/fish-s2-test-venv/bin/python" -m pip install --disable-pip-version-check -r servers/tts/fishs2/requirements.txt
+
+      - name: Compile Fish sidecar and run contract tests
+        working-directory: servers/tts/fishs2
+        run: |
+          "$RUNNER_TEMP/fish-s2-test-venv/bin/python" -m py_compile server.py test_server.py
+          "$RUNNER_TEMP/fish-s2-test-venv/bin/python" -m unittest discover -p 'test_*.py'
+
+      - name: Check Fish installer syntax
+        run: |
+          bash -n servers/tts/fishs2/install-fishs2.sh
+          pwsh -NoProfile -Command '$tokens = $null; $errors = $null; [System.Management.Automation.Language.Parser]::ParseFile("servers/tts/fishs2/install-fishs2.ps1", [ref]$tokens, [ref]$errors); if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }'

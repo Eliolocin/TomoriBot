@@ -206,7 +206,7 @@ bun run launch --qwen3tts
 bun run launch --help
 ```
 
-Available flags: `--searxng`, `--crawl4ai`, `--qwen3tts`, `--chatterbox`, `--irodoritts`, `--whisperx`, `--help`
+Available flags: `--searxng`, `--crawl4ai`, `--qwen3tts`, `--chatterbox`, `--irodoritts`, `--fishs2`, `--whisperx`, `--help`
 
 **Ctrl+C** stops the bot and any Python sidecar processes. Docker containers (`--searxng`, `--crawl4ai`) are intentionally left running, stop them manually with `docker stop searxng` / `docker stop crawl4ai` when you're done.
 

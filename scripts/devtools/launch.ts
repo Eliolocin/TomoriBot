@@ -80,9 +80,20 @@ interface PythonSidecar {
   scriptArgs?: string[];
   /** milliseconds to wait after spawn before proceeding (default 3s) */
   startupDelayMs?: number;
+  /** JSON health endpoint that must report {"status":"ok"} before startup succeeds. */
+  httpHealthUrl?: string;
+  /** milliseconds to wait for the health endpoint (default 120s) */
+  healthTimeoutMs?: number;
+  /** headers sent to the health endpoint, such as a configured bearer token */
+  healthHeaders?: Record<string, string>;
 }
 
 type SidecarDef = DockerSidecar | PythonSidecar;
+
+function parsePositiveMilliseconds(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 /** Registry of all supported --flag → sidecar definitions. */
 const SIDECARS: Record<string, SidecarDef> = {
@@ -157,7 +168,13 @@ const SIDECARS: Record<string, SidecarDef> = {
     displayName: "Fish S2 Pro",
     venvRelPath: "servers/tts/fishs2/.venv",
     scriptRelPath: "servers/tts/fishs2/server.py",
-    startupDelayMs: 12_000,
+    httpHealthUrl: `http://127.0.0.1:${process.env.FISH_S2_PORT ?? process.env.TOMORI_TTS_PORT ?? "8015"}/health`,
+    healthTimeoutMs: parsePositiveMilliseconds(process.env.FISH_S2_LAUNCH_TIMEOUT_MS, 240_000),
+    healthHeaders: {
+      ...(process.env.FISH_S2_API_KEY || process.env.TOMORI_TTS_API_KEY
+        ? { Authorization: `Bearer ${process.env.FISH_S2_API_KEY ?? process.env.TOMORI_TTS_API_KEY}` }
+        : {}),
+    },
   },
 
   whisperx: {
@@ -263,13 +280,68 @@ async function ensureDockerSidecar(def: DockerSidecar): Promise<void> {
   console.log(`${label} ${pc.green("Healthy ✓")}`);
 }
 
+type PythonReadinessResult =
+  | { kind: "exit"; code: number }
+  | { kind: "delay" }
+  | { kind: "health"; ready: boolean };
+
+async function probePythonHealth(url: string, headers: Record<string, string>): Promise<boolean> {
+  try {
+    const response = await fetch(url, {
+      headers,
+      signal: AbortSignal.timeout(2_000),
+    });
+    if (!response.ok) return false;
+    const body: unknown = await response.json();
+    return typeof body === "object" && body !== null && "status" in body && body.status === "ok";
+  } catch {
+    return false;
+  }
+}
+
+async function waitForPythonReadiness(
+  proc: ReturnType<typeof Bun.spawn>,
+  def: PythonSidecar,
+  label: string,
+): Promise<void> {
+  const childExit = proc.exited.then((code): PythonReadinessResult => ({ kind: "exit", code }));
+  if (def.httpHealthUrl) {
+    const timeoutMs = def.healthTimeoutMs ?? 120_000;
+    const deadline = Date.now() + timeoutMs;
+    console.log(`${label} Waiting for JSON health readiness (timeout ${timeoutMs / 1000}s)...`);
+    while (Date.now() < deadline) {
+      const result = await Promise.race([
+        childExit,
+        probePythonHealth(def.httpHealthUrl, def.healthHeaders ?? {}).then(
+          (ready): PythonReadinessResult => ({ kind: "health", ready }),
+        ),
+      ]);
+      if (result.kind === "exit") {
+        throw new Error(`${label} exited during startup with code ${result.code}.`);
+      }
+      if (result.kind === "health" && result.ready) return;
+      await Bun.sleep(1_000);
+    }
+    throw new Error(`${label} did not report JSON health status ok within ${timeoutMs / 1000}s.`);
+  }
+
+  const startupDelayMs = def.startupDelayMs ?? 3_000;
+  console.log(`${label} Waiting ${startupDelayMs / 1000}s for server to initialize...`);
+  const result = await Promise.race([
+    childExit,
+    Bun.sleep(startupDelayMs).then((): PythonReadinessResult => ({ kind: "delay" })),
+  ]);
+  if (result.kind === "exit") {
+    throw new Error(`${label} exited during startup with code ${result.code}.`);
+  }
+}
+
 /**
- * Spawns a Python sidecar server from its pre-built venv and waits
- * `startupDelayMs` milliseconds for it to bind before returning the handle.
- * Throws if the venv is missing (user must run setup first).
+ * Spawns a Python sidecar server from its pre-built venv and waits for either
+ * its JSON health endpoint or its configured compatibility delay.
  */
 async function startPythonSidecar(def: PythonSidecar): Promise<ReturnType<typeof Bun.spawn>> {
-  const { displayName, venvRelPath, scriptRelPath, scriptArgs = [], startupDelayMs = 3_000 } = def;
+  const { displayName, venvRelPath, scriptRelPath, scriptArgs = [] } = def;
   const label = pc.magenta(`[${displayName}]`);
 
   const pythonExe = resolvePythonExe(venvRelPath);
@@ -289,9 +361,12 @@ async function startPythonSidecar(def: PythonSidecar): Promise<ReturnType<typeof
     cwd: ROOT,
   });
 
-  // Give the Python HTTP server time to bind its port.
-  console.log(`${label} Waiting ${startupDelayMs / 1000}s for server to initialize...`);
-  await Bun.sleep(startupDelayMs);
+  try {
+    await waitForPythonReadiness(proc, def, label);
+  } catch (error) {
+    try { proc.kill(); } catch { /* process may have exited already */ }
+    throw error;
+  }
   console.log(`${label} ${pc.green("Started ✓")}`);
 
   return proc;

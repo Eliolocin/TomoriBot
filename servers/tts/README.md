@@ -45,7 +45,7 @@ python servers\tts\chatterbox\server.py
 
 Qwen3-TTS follows a similar venv + requirements flow. Irodori-TTS uses `uv` and backend extras instead; see `docs/en/self-hosting/local-endpoints/text-to-speech/irodoritts.md` for its current setup.
 
-Fish S2 Pro has its own installer because the sidecar also installs the Fish Speech runtime and downloads the quantized checkpoint. See `docs/en/self-hosting/local-endpoints/text-to-speech/fishs2.md`. The default `Imagilux/fishaudio-s2-pro` checkpoint uses INT8 weight-only quantization and is intended to fit consumer GPUs with 16 GB VRAM while keeping the codec, embeddings, and layer norms in BF16.
+Fish S2 Pro has its own installer because the sidecar also installs the Fish Speech runtime and downloads the quantized checkpoint. See `docs/en/self-hosting/local-endpoints/text-to-speech/fishs2.md`. The default `Imagilux/fishaudio-s2-pro` checkpoint uses INT8 weight-only quantization and is intended to fit consumer GPUs with 16 GB VRAM while keeping the codec, embeddings, and layer norms in BF16. The installer pins both upstream revisions and requires an explicit override for updates.
 
 ## Registering in TomoriBot
 
@@ -66,3 +66,5 @@ Qwen3-TTS defaults to auto mode. One server URL can handle both clone and VoiceD
 Irodori-TTS v4.1 also supports TomoriBot's `Auto` voice source mode from one endpoint. Clone requests use `ref_audio`; VoiceDesign requests use `instruct`, which the wrapper maps to Irodori caption conditioning.
 
 Fish S2 Pro is registered as a cloning endpoint with `Bracket Tags` markup. TomoriBot sends the stored reference WAV and transcript directly to Fish, while expression tags such as `[whisper]`, `[excited]`, and `[angry]` remain in the generated script for Fish's fine-grained delivery control.
+
+Fish's wrapper accepts PCM WAV references up to the configured decoded-audio limit and binds to loopback by default. Configure a bearer token before exposing it on a non-loopback address.

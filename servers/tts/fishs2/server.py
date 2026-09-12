@@ -2,19 +2,24 @@ from __future__ import annotations
 
 import atexit
 import base64
+import binascii
+import hmac
+import io
+import ipaddress
 import os
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
+import wave
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
 import ormsgpack
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -29,14 +34,26 @@ MODEL_DIR = Path(
 ).resolve()
 
 HOST = os.getenv("TOMORI_TTS_HOST", "127.0.0.1")
-PORT = int(os.getenv("TOMORI_TTS_PORT", "8015"))
+PORT = int(os.getenv("FISH_S2_PORT", os.getenv("TOMORI_TTS_PORT", "8015")))
 UPSTREAM_HOST = os.getenv("FISH_S2_UPSTREAM_HOST", "127.0.0.1")
 UPSTREAM_PORT = int(os.getenv("FISH_S2_UPSTREAM_PORT", "8025"))
 UPSTREAM_URL = f"http://{UPSTREAM_HOST}:{UPSTREAM_PORT}"
 MAX_TEXT_CHARS = int(os.getenv("TOMORI_TTS_MAX_TEXT_CHARS", "2000"))
+MAX_REFERENCE_AUDIO_BYTES = int(
+    os.getenv("FISH_S2_MAX_REF_AUDIO_BYTES", os.getenv("TOMORI_TTS_MAX_REF_AUDIO_BYTES", str(10 * 1024 * 1024)))
+)
 STARTUP_TIMEOUT_SECONDS = float(os.getenv("FISH_S2_STARTUP_TIMEOUT_SECONDS", "180"))
+SYNTHESIS_TIMEOUT_SECONDS = float(os.getenv("FISH_S2_SYNTHESIS_TIMEOUT_SECONDS", "240"))
 COMPILE = os.getenv("FISH_S2_COMPILE", "0").lower() in {"1", "true", "yes", "on"}
 HALF = os.getenv("FISH_S2_HALF", "0").lower() in {"1", "true", "yes", "on"}
+MODEL_ID = os.getenv("FISH_S2_MODEL_ID", "Imagilux/fishaudio-s2-pro")
+API_KEY = (os.getenv("FISH_S2_API_KEY") or os.getenv("TOMORI_TTS_API_KEY") or "").strip()
+ALLOW_INSECURE_REMOTE = os.getenv("FISH_S2_ALLOW_INSECURE_REMOTE", "0").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 CHUNK_LENGTH = int(os.getenv("FISH_S2_CHUNK_LENGTH", "200"))
 TOP_P = float(os.getenv("FISH_S2_TOP_P", "0.8"))
@@ -56,6 +73,37 @@ class SynthesizeRequest(BaseModel):
     language: Optional[str] = None
 
 
+def is_loopback_host(host: str) -> bool:
+    normalized = host.strip().lower()
+    if normalized == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(normalized).is_loopback
+    except ValueError:
+        return False
+
+
+def validate_bind_policy() -> None:
+    if not is_loopback_host(HOST) and not API_KEY and not ALLOW_INSECURE_REMOTE:
+        raise RuntimeError(
+            "Fish S2 remote binding requires FISH_S2_API_KEY or "
+            "FISH_S2_ALLOW_INSECURE_REMOTE=1. Keep TOMORI_TTS_HOST on loopback when possible."
+        )
+
+
+def authorize_request(request: Request | None) -> None:
+    if not API_KEY:
+        return
+    authorization = request.headers.get("authorization", "") if request is not None else ""
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not hmac.compare_digest(token, API_KEY):
+        raise HTTPException(
+            status_code=401,
+            detail="A valid bearer token is required.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
 def require_installation() -> None:
     api_server = FISH_SPEECH_DIR / "tools" / "api_server.py"
     codec = MODEL_DIR / "codec.pth"
@@ -67,7 +115,7 @@ def require_installation() -> None:
     if not codec.is_file():
         raise RuntimeError(
             f"Fish S2 Pro checkpoint not found at {MODEL_DIR}. "
-            "Download Imagilux/fishaudio-s2-pro before starting the sidecar."
+            f"Download {MODEL_ID} before starting the sidecar."
         )
 
 
@@ -89,6 +137,7 @@ def wait_for_upstream() -> None:
 
 def start_fish_api() -> None:
     global fish_process
+    validate_bind_policy()
     require_installation()
 
     command = [
@@ -141,11 +190,13 @@ app = FastAPI(title="TomoriBot Fish Audio S2 Pro TTS Server", lifespan=lifespan)
 
 
 @app.get("/health")
-def health() -> dict[str, str | bool]:
+def health(request: Request) -> dict[str, str | bool]:
+    authorize_request(request)
     running = fish_process is not None and fish_process.poll() is None
     return {
         "status": "ok" if running else "loading",
-        "model": "fish-audio-s2-pro-int8",
+        "model": MODEL_ID,
+        "model_family": "Fish Audio S2 Pro",
         "model_dir": str(MODEL_DIR),
         "runtime": "Imagilux/fish-speech",
         "compile": COMPILE,
@@ -154,18 +205,56 @@ def health() -> dict[str, str | bool]:
     }
 
 
+def validate_wav_container(audio: bytes) -> None:
+    if len(audio) < 12 or audio[:4] != b"RIFF" or audio[8:12] != b"WAVE":
+        raise HTTPException(status_code=400, detail="ref_audio must be a RIFF/WAVE container.")
+
+    declared_size = int.from_bytes(audio[4:8], "little") + 8
+    if declared_size > len(audio):
+        raise HTTPException(status_code=400, detail="ref_audio contains a truncated WAV container.")
+
+    try:
+        with wave.open(io.BytesIO(audio), "rb") as wav_file:
+            if wav_file.getcomptype() != "NONE":
+                raise HTTPException(status_code=400, detail="ref_audio must contain uncompressed PCM audio.")
+            if wav_file.getnchannels() < 1 or wav_file.getframerate() < 1 or wav_file.getsampwidth() < 1:
+                raise HTTPException(status_code=400, detail="ref_audio has invalid WAV audio parameters.")
+            if wav_file.getnframes() < 1:
+                raise HTTPException(status_code=400, detail="ref_audio must contain at least one audio frame.")
+            expected_bytes = wav_file.getnframes() * wav_file.getnchannels() * wav_file.getsampwidth()
+            if len(wav_file.readframes(wav_file.getnframes())) < expected_bytes:
+                raise HTTPException(status_code=400, detail="ref_audio contains truncated PCM data.")
+    except HTTPException:
+        raise
+    except (EOFError, OSError, ValueError, wave.Error) as exc:
+        raise HTTPException(status_code=400, detail="ref_audio is not a valid PCM WAV file.") from exc
+
+
 def decode_reference_audio(raw_base64: str) -> bytes:
+    max_encoded_length = ((MAX_REFERENCE_AUDIO_BYTES + 2) // 3) * 4
+    if len(raw_base64) > max_encoded_length:
+        raise HTTPException(
+            status_code=413,
+            detail=f"ref_audio exceeds the {MAX_REFERENCE_AUDIO_BYTES} byte limit.",
+        )
     try:
         audio = base64.b64decode(raw_base64, validate=True)
-    except Exception as exc:
+    except (binascii.Error, ValueError) as exc:
         raise HTTPException(status_code=400, detail="ref_audio must be valid base64.") from exc
     if not audio:
         raise HTTPException(status_code=400, detail="ref_audio must not be empty.")
+    if len(audio) > MAX_REFERENCE_AUDIO_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"ref_audio exceeds the {MAX_REFERENCE_AUDIO_BYTES} byte limit.",
+        )
+    validate_wav_container(audio)
     return audio
 
 
 @app.post("/synthesize")
-def synthesize(payload: SynthesizeRequest) -> Response:
+def synthesize(payload: SynthesizeRequest, request: Request) -> Response:
+    authorize_request(request)
     if fish_process is None or fish_process.poll() is not None:
         raise HTTPException(status_code=503, detail="Fish Speech runtime is not ready.")
 
@@ -205,7 +294,7 @@ def synthesize(payload: SynthesizeRequest) -> Response:
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=240) as response:
+        with urllib.request.urlopen(request, timeout=SYNTHESIS_TIMEOUT_SECONDS) as response:
             audio = response.read()
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
