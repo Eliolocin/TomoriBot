@@ -97,7 +97,7 @@ After adding her to your server through either method above, run the `/setup` co
 ![Screenshots 6](assets/img/scs/6.png)
 
 <h3 align="center"><a href="https://docs.tomoribot.app/en/features/integrations/sillytavern-support/">SillyTavern Integration (Beta)</a></h3>
-<p align="center">Use your favorite SillyTavern presets directly in Discord through TomoriBot which adjusts her prompt completely, just plop the .json right in through <code>st-preset</code>. Discord's new native checkbox groups for modals makes it easy to toggle nodes on and off like in SillyTavern. You can also import SillyTavern character cards directly through <code>/persona import</code> or you can modify them first with <code>/persona generate</code>.</p>
+<p align="center">Use your favorite SillyTavern presets directly in Discord through TomoriBot which adjusts her prompt completely, just plop the .json right in through <code>st-preset</code>. Discord's new native checkbox groups for modals makes it easy to toggle nodes on and off like SillyTavern. You can also import SillyTavern character cards directly through <code>/persona import</code> or you can modify them first with <code>/persona generate</code>.</p>
 
 ![Screenshots 5](assets/img/scs/5.png)
 <h3 align="center"><a href="https://docs.tomoribot.app/en/features/">Lots of More Features, and Counting!</a></h3>
@@ -201,12 +201,13 @@ bun run launch --searxng --crawl4ai
 
 # With a local TTS server after following the voice setup docs
 bun run launch --qwen3tts
+bun run launch --cosyvoice3
 
 # See all available flags
 bun run launch --help
 ```
 
-Available flags: `--searxng`, `--crawl4ai`, `--qwen3tts`, `--chatterbox`, `--irodoritts`, `--whisperx`, `--help`
+Available flags: `--searxng`, `--crawl4ai`, `--qwen3tts`, `--chatterbox`, `--irodoritts`, `--cosyvoice3`, `--whisperx`, `--help`
 
 **Ctrl+C** stops the bot and any Python sidecar processes. Docker containers (`--searxng`, `--crawl4ai`) are intentionally left running, stop them manually with `docker stop searxng` / `docker stop crawl4ai` when you're done.
 
