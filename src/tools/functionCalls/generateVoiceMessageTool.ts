@@ -88,10 +88,10 @@ export type VoiceScriptMarkup = keyof typeof VOICE_TOOL_VARIANTS;
 export function buildVoiceMessageToolVariant(
   tool: Tool,
   scriptMarkup: VoiceScriptMarkup,
-  supportsInstruct = false,
+  cloneInstructionsAvailable = false,
 ): Tool {
   const variant = VOICE_TOOL_VARIANTS[scriptMarkup] ?? VOICE_TOOL_VARIANTS["bracket-tags"];
-  const exposesVoiceInstructions = scriptMarkup === "voice-design" || supportsInstruct;
+  const exposesVoiceInstructions = scriptMarkup === "voice-design" || cloneInstructionsAvailable;
   const parameters: ToolParameterSchema = {
     ...tool.parameters,
     properties: {
@@ -112,7 +112,7 @@ export function buildVoiceMessageToolVariant(
   };
 
   const description =
-    supportsInstruct && scriptMarkup !== "voice-design"
+    cloneInstructionsAvailable && scriptMarkup !== "voice-design"
       ? `${variant.toolDescription} You may optionally provide natural-language delivery direction in voice_instructions; it shapes this message only and is not spoken aloud.`
       : variant.toolDescription;
 
@@ -159,10 +159,10 @@ export class GenerateVoiceMessageTool extends BaseTool {
         ? (scriptMarkup as VoiceScriptMarkup)
         : "bracket-tags";
     const capabilities = resolveVoiceSourceCapabilities(endpoint);
-    const supportsCloneInstructions =
+    const cloneInstructionsAvailable =
       !voiceDesign && capabilities.acceptsCloneShape && Boolean(endpoint?.extra_config.supports_instruct);
 
-    return buildVoiceMessageToolVariant(this, variant, supportsCloneInstructions);
+    return buildVoiceMessageToolVariant(this, variant, cloneInstructionsAvailable);
   }
 
   private resolveThreadId(context: ToolContext): string | undefined {

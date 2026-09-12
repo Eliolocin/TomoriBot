@@ -33,6 +33,7 @@ function makeEndpoint(options: {
   modelName?: string;
   endpointUrl?: string;
   scriptMarkup?: string;
+  supportsInstruct?: boolean;
 }): CustomEndpointRow {
   return {
     label: options.label ?? "Speech",
@@ -42,6 +43,7 @@ function makeEndpoint(options: {
     extra_config: {
       ...(options.voiceMode ? { voice_mode: options.voiceMode } : {}),
       ...(options.scriptMarkup ? { script_markup: options.scriptMarkup } : {}),
+      ...(options.supportsInstruct ? { supports_instruct: true } : {}),
     },
   } as unknown as CustomEndpointRow;
 }
@@ -57,6 +59,13 @@ const NON_CHATTERBOX_CLONE = makeEndpoint({
   label: "Qwen3-TTS",
   modelName: "qwen3-tts",
   endpointUrl: "https://qwen.example.test",
+});
+
+const INSTRUCT_CLONE = makeEndpoint({
+  voiceMode: "clone",
+  label: "CosyVoice 3",
+  modelName: "Fun-CosyVoice3-0.5B-2512",
+  supportsInstruct: true,
 });
 
 const VOICE_DESIGN_ONLY = makeEndpoint({ voiceMode: "voice-design", label: "Qwen3 VoiceDesign" });
@@ -91,6 +100,8 @@ function buildInput(options: {
     scriptMarkup: options.endpoint.extra_config.script_markup as string | undefined,
     designShapeAvailable:
       candidates.some((candidate) => candidate.shape === "design") || capabilities.acceptsDesignShape,
+    cloneInstructionsAvailable:
+      capabilities.acceptsCloneShape && Boolean(options.endpoint.extra_config.supports_instruct),
     uploadShapeSelected: defaultSource?.id === "upload",
     expressiveness: options.expressiveness,
     chatterboxDefaults: { cfgWeight: 0.5, exaggeration: 0.5 },
@@ -217,6 +228,18 @@ describe("buildVoiceMessageModalComponents", () => {
 
     expect(componentIds(input)).not.toContain(VOICE_MESSAGE_DIRECTION_INPUT_ID);
   });
+
+  it("renders delivery direction for a clone endpoint with clone instructions", () => {
+    const input = buildInput({
+      endpoint: INSTRUCT_CLONE,
+      persona: { speech_voice_sample_id: 12 },
+      expressiveness: null,
+    });
+
+    expect(input.designShapeAvailable).toBe(false);
+    expect(input.cloneInstructionsAvailable).toBe(true);
+    expect(componentIds(input)).toContain(VOICE_MESSAGE_DIRECTION_INPUT_ID);
+  });
 });
 
 describe("buildVoiceMessageModalComponents radio options", () => {
@@ -273,6 +296,7 @@ describe("buildVoiceMessageModalComponents radio options", () => {
       candidates: [{ id: "elevenlabs", shape: "elevenlabs" }],
       scriptMarkup: undefined,
       designShapeAvailable: false,
+      cloneInstructionsAvailable: false,
       uploadShapeSelected: false,
       expressiveness: "elevenlabs",
       chatterboxDefaults: { cfgWeight: 0.5, exaggeration: 0.5 },

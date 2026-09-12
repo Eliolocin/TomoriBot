@@ -10,9 +10,7 @@ Each engine lives in its own subfolder with its own `.venv` to keep dependencies
 | Qwen3-TTS 12Hz 1.7B Base / VoiceDesign auto mode (10 languages, plain text) | `qwen3tts/` | 8012 |
 | Irodori-TTS v4.1 (Japanese, clone + VoiceDesign, emoji tags) | `irodoritts/` | 8013 |
 | Qwen3-TTS 12Hz 1.7B VoiceDesign (natural-language voice descriptions) | `qwen3tts/server.py --mode voice-design` | 8014 |
-| CosyVoice 3 0.5B (9 languages, cloning + instruct, upstream streaming) | `cosyvoice3/` | 8016 |
-
-Port 8016 is used for CosyVoice 3 so it does not collide with the Fish S2 Pro sidecar being developed on PR #85, which uses 8015.
+| CosyVoice 3 0.5B (9 languages, cloning + instruct) | `cosyvoice3/` | 8017 |
 
 ## Prerequisites
 
@@ -64,4 +62,8 @@ Qwen3-TTS defaults to auto mode. One server URL can handle both clone and VoiceD
 
 Irodori-TTS v4.1 also supports TomoriBot's `Auto` voice source mode from one endpoint. Clone requests use `ref_audio`; VoiceDesign requests use `instruct`, which the wrapper maps to Irodori caption conditioning.
 
-CosyVoice 3 uses Clone voice mode. It consumes the reference audio and transcript for standard zero-shot cloning, supports cross-lingual cloning without a transcript, and maps `instruct` or supported bracket delivery tags to CosyVoice 3's current `inference_instruct2` path. Its official runtime can stream audio chunks internally; TomoriBot still receives one complete WAV for the current Discord voice-message pipeline.
+CosyVoice 3 uses Clone voice mode with Plain markup. It consumes the reference audio and transcript
+for standard zero-shot cloning, supports cross-lingual cloning without a transcript, and maps
+`instruct` to CosyVoice 3's current `inference_instruct2` path. Its internal streaming mode is off
+by default because TomoriBot receives one complete WAV for the current Discord voice-message
+pipeline.

@@ -47,6 +47,16 @@ jobs:
       - name: Install PostgreSQL client tools
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
+      - name: Validate Python sidecar contracts and installer syntax
+        shell: bash
+        run: |
+          python3 -m compileall -q servers/tts
+          python3 -m unittest discover -s servers/tts/cosyvoice3 -p 'test_*.py'
+          bash -n servers/tts/cosyvoice3/install-cosyvoice3.sh
+          if command -v pwsh >/dev/null 2>&1; then
+            pwsh -NoProfile -Command '$errors = $null; [System.Management.Automation.Language.Parser]::ParseFile("servers/tts/cosyvoice3/install-cosyvoice3.ps1", [ref]$null, [ref]$errors) | Out-Null; if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }'
+          fi
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 

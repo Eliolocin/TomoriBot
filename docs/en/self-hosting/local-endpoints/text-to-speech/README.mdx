@@ -44,7 +44,7 @@ For Qwen3-TTS VoiceDesign, skip the audio sample and use Persona > Voice in `/co
 
 ElevenLabs users should choose **Add New Provider** and **ElevenLabs** in `/providers`; it registers the speech and transcription endpoints together.
 
-TomoriBot strips Discord custom emoji syntax such as `:pepega:` or `<:pepega:123456789012345678>` from generated voice scripts before synthesis. Unicode emojis are also stripped unless the speech endpoint uses emoji markup, which is intended for IrodoriTTS.
+TomoriBot strips Discord custom emoji syntax such as `:pepega:` or `<:pepega:123456789012345678>` from generated voice scripts before synthesis. Unicode emojis are also stripped unless the speech endpoint uses emoji markup, which is intended for IrodoriTTS. CosyVoice 3 uses Plain markup, so enter delivery direction in `voice_instructions` rather than inline bracket tags.
 
 ## Hardware requirements
 
@@ -55,7 +55,7 @@ Local TTS is generally lighter than running a large local LLM, but the exact run
 | Chatterbox | ~0.5B (Turbo) | Fastest current option. |
 | Qwen3-TTS | 1.7B (12 Hz) | Separate clone + VoiceDesign models; only one loads at a time. |
 | IrodoriTTS | 500M (v2) | Japanese-focused; `bf16` on GPU, `fp32` on CPU. |
-| CosyVoice 3 | 0.5B | Unquantized default; 16 GB VRAM is a comfortable target, with upstream audio streaming retained inside the wrapper. |
+| CosyVoice 3 | 0.5B | Unquantized default; 16 GB VRAM is a comfortable target, with optional upstream streaming disabled by default. |
 
 CosyVoice 3's current model download is larger than its 0.5B LLM size because the package also includes the flow model, speech tokenizers, English text model, and both base and RL LLM weights. See its guide for disk-space, CUDA, and Windows/WSL details.
 

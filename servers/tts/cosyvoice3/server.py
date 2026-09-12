@@ -16,9 +16,11 @@ import numpy as np
 import soundfile as sf
 import torch
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
+
+from routing import resolve_synthesis_mode
 
 
 ROOT = Path(__file__).resolve().parent
@@ -32,14 +34,18 @@ MODEL_DIR = Path(
 MODEL_ID = os.getenv("COSYVOICE3_MODEL_ID", "FunAudioLLM/Fun-CosyVoice3-0.5B-2512")
 
 HOST = os.getenv("TOMORI_TTS_HOST", "127.0.0.1")
-PORT = int(os.getenv("TOMORI_TTS_PORT", "8016"))
+PORT = int(os.getenv("COSYVOICE3_PORT", os.getenv("TOMORI_TTS_PORT", "8017")))
 MAX_TEXT_CHARS = int(os.getenv("TOMORI_TTS_MAX_TEXT_CHARS", "2000"))
-UPSTREAM_STREAM = os.getenv("COSYVOICE3_UPSTREAM_STREAM", "1").lower() in {"1", "true", "yes", "on"}
+UPSTREAM_STREAM = os.getenv("COSYVOICE3_UPSTREAM_STREAM", "0").lower() in {"1", "true", "yes", "on"}
 FP16 = os.getenv("COSYVOICE3_FP16", "0").lower() in {"1", "true", "yes", "on"}
 LOAD_TRT = os.getenv("COSYVOICE3_LOAD_TRT", "0").lower() in {"1", "true", "yes", "on"}
 LOAD_VLLM = os.getenv("COSYVOICE3_LOAD_VLLM", "0").lower() in {"1", "true", "yes", "on"}
 SPEED = float(os.getenv("COSYVOICE3_SPEED", "1.0"))
 DEFAULT_INSTRUCT = os.getenv("COSYVOICE3_DEFAULT_INSTRUCT", "").strip()
+MAX_REF_AUDIO_BYTES = int(os.getenv("COSYVOICE3_MAX_REF_AUDIO_BYTES", str(25 * 1024 * 1024)))
+MAX_REF_AUDIO_SECONDS = float(os.getenv("COSYVOICE3_MAX_REF_AUDIO_SECONDS", "30"))
+BEARER_TOKEN = os.getenv("COSYVOICE3_BEARER_TOKEN", "").strip()
+ALLOW_REMOTE_BIND = os.getenv("COSYVOICE3_ALLOW_REMOTE_BIND", "0").lower() in {"1", "true", "yes", "on"}
 
 SYSTEM_PROMPT = "You are a helpful assistant."
 END_OF_PROMPT = "<|endofprompt|>"
@@ -58,30 +64,24 @@ LANGUAGE_NAMES = {
     "ru": "Russian",
 }
 
-# CosyVoice 3 officially documents [breath] and [laughter] as fine-grained
-# in-band controls. TomoriBot's generic bracket-tag mode can also produce
-# descriptive tags, so the common ones below are translated into CosyVoice 3's
-# natural-language instruction path instead of being spoken literally.
-PASSTHROUGH_TAGS = {"breath", "laughter"}
-STYLE_TAG_INSTRUCTIONS = {
-    "happy": "Speak happily.",
-    "sad": "Speak sadly.",
-    "angry": "Speak angrily.",
-    "excited": "Speak with excitement.",
-    "tired": "Sound tired.",
-    "sleepy": "Sound sleepy and quiet.",
-    "whisper": "Speak in a whisper.",
-    "whispers": "Speak in a whisper.",
-    "whispering": "Speak in a whisper.",
-    "laugh": "Include natural laughter in the delivery.",
-    "laughs": "Include natural laughter in the delivery.",
-    "fast": "Speak quickly.",
-    "slow": "Speak slowly.",
-    "quiet": "Speak quietly.",
-    "soft": "Speak softly.",
-    "loud": "Speak loudly.",
-}
 TAG_REGEX = re.compile(r"\[([^\]\r\n]{1,40})\]")
+
+
+def is_loopback_host(host: str) -> bool:
+    return host in {"127.0.0.1", "localhost", "::1"}
+
+
+if not is_loopback_host(HOST) and not ALLOW_REMOTE_BIND:
+    raise RuntimeError(
+        "CosyVoice 3 refuses non-loopback binding by default. "
+        "Set COSYVOICE3_ALLOW_REMOTE_BIND=1 only when remote access is intentional."
+    )
+if not is_loopback_host(HOST) and not BEARER_TOKEN:
+    print(
+        "[CosyVoice3] Warning: remote binding is enabled without COSYVOICE3_BEARER_TOKEN.",
+        file=sys.stderr,
+        flush=True,
+    )
 
 model = None
 model_lock = threading.Lock()
@@ -161,6 +161,9 @@ def health() -> dict[str, object]:
         "model_dir": str(MODEL_DIR),
         "sample_rate": int(model.sample_rate) if model is not None else 24000,
         "upstream_streaming": UPSTREAM_STREAM,
+        "port": PORT,
+        "max_ref_audio_bytes": MAX_REF_AUDIO_BYTES,
+        "max_ref_audio_seconds": MAX_REF_AUDIO_SECONDS,
         "supports_zero_shot": True,
         "supports_cross_lingual": True,
         "supports_instruct": True,
@@ -168,15 +171,33 @@ def health() -> dict[str, object]:
 
 
 def decode_reference_audio(raw_base64: str, directory: str) -> str:
+    max_encoded_chars = ((MAX_REF_AUDIO_BYTES + 2) // 3) * 4
+    if len(raw_base64) > max_encoded_chars:
+        raise HTTPException(status_code=413, detail="ref_audio exceeds the configured size limit.")
     try:
         audio = base64.b64decode(raw_base64, validate=True)
     except Exception as exc:
         raise HTTPException(status_code=400, detail="ref_audio must be valid base64.") from exc
     if not audio:
         raise HTTPException(status_code=400, detail="ref_audio must not be empty.")
+    if len(audio) > MAX_REF_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="ref_audio exceeds the configured size limit.")
 
     ref_path = Path(directory) / "reference.wav"
     ref_path.write_bytes(audio)
+    try:
+        info = sf.info(ref_path)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="ref_audio must be a readable audio container.") from exc
+    if info.format not in {"WAV", "FLAC", "OGG", "AIFF"}:
+        raise HTTPException(status_code=400, detail="ref_audio must use WAV, FLAC, OGG, or AIFF audio.")
+    if info.frames <= 0 or info.samplerate <= 0:
+        raise HTTPException(status_code=400, detail="ref_audio must contain audio frames.")
+    if info.duration > MAX_REF_AUDIO_SECONDS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"ref_audio exceeds the configured {MAX_REF_AUDIO_SECONDS:g}-second duration limit.",
+        )
     return str(ref_path)
 
 
@@ -189,26 +210,16 @@ def normalize_language(language: Optional[str]) -> str:
     return LANGUAGE_NAMES.get(normalized, language.strip())
 
 
-def prepare_script_and_style(text: str) -> tuple[str, list[str]]:
-    style_instructions: list[str] = []
-
-    def replace_tag(match: re.Match[str]) -> str:
-        raw_tag = match.group(1).strip()
-        normalized = raw_tag.lower()
-        if normalized in PASSTHROUGH_TAGS:
-            return f"[{normalized}]"
-        instruction = STYLE_TAG_INSTRUCTIONS.get(normalized)
-        if instruction:
-            style_instructions.append(instruction)
-        return ""
-
-    cleaned = TAG_REGEX.sub(replace_tag, text)
+def prepare_script(text: str) -> str:
+    # CosyVoice instructions apply to the whole request. Removing tags here avoids turning
+    # positional [happy] and [sad] markers into contradictory utterance-wide directions.
+    cleaned = TAG_REGEX.sub("", text)
     cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
     cleaned = re.sub(r"[^\S\n]+", " ", cleaned).strip()
-    return cleaned, style_instructions
+    return cleaned
 
 
-def build_instruct(payload: SynthesizeRequest, style_instructions: list[str]) -> str:
+def build_instruct(payload: SynthesizeRequest) -> str:
     parts: list[str] = []
     language = normalize_language(payload.language)
     if language:
@@ -220,7 +231,6 @@ def build_instruct(payload: SynthesizeRequest, style_instructions: list[str]) ->
         explicit = explicit.replace(END_OF_PROMPT, " ").strip()
         parts.append(explicit)
 
-    parts.extend(style_instructions)
     if not parts:
         return ""
 
@@ -257,7 +267,8 @@ def iter_inference(
     ref_text: str,
     instruct: str,
 ):
-    if instruct:
+    mode = resolve_synthesis_mode(ref_text=ref_text, instruct=instruct, language="")
+    if mode == "instruct2":
         return "instruct2", model.inference_instruct2(
             text,
             instruct,
@@ -266,7 +277,7 @@ def iter_inference(
             speed=SPEED,
         )
 
-    if ref_text:
+    if mode == "zero_shot":
         prompt_text = f"{SYSTEM_PROMPT}{END_OF_PROMPT}{ref_text}"
         return "zero_shot", model.inference_zero_shot(
             text,
@@ -289,7 +300,9 @@ def iter_inference(
 
 
 @app.post("/synthesize")
-def synthesize(payload: SynthesizeRequest) -> Response:
+def synthesize(payload: SynthesizeRequest, authorization: Optional[str] = Header(default=None)) -> Response:
+    if BEARER_TOKEN and authorization != f"Bearer {BEARER_TOKEN}":
+        raise HTTPException(status_code=401, detail="A valid bearer token is required.")
     if model is None:
         raise HTTPException(status_code=503, detail="CosyVoice 3 is still loading.")
 
@@ -301,12 +314,12 @@ def synthesize(payload: SynthesizeRequest) -> Response:
     if not payload.ref_audio or not payload.ref_audio.strip():
         raise HTTPException(status_code=400, detail="ref_audio is required for CosyVoice 3 voice cloning.")
 
-    processed_text, style_instructions = prepare_script_and_style(text)
+    processed_text = prepare_script(text)
     if not processed_text:
-        raise HTTPException(status_code=400, detail="text was empty after removing unsupported bracket tags.")
+        raise HTTPException(status_code=400, detail="text was empty after removing bracket tags.")
 
     ref_text = payload.ref_text.strip() if payload.ref_text else ""
-    instruct = build_instruct(payload, style_instructions)
+    instruct = build_instruct(payload)
 
     with tempfile.TemporaryDirectory(prefix="tomori-cosyvoice3-") as temp_dir:
         ref_path = decode_reference_audio(payload.ref_audio, temp_dir)

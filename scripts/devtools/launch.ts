@@ -11,12 +11,12 @@ config();
 //
 //   bun run launch [--searxng] [--crawl4ai] [--qwen3tts] [--chatterbox] [--irodoritts] [--cosyvoice3]
 //
-//   Starts requested sidecar services, waits for them to be ready, then
+//   Starts requested sidecar services, waits for their JSON health responses, then
 //   launches the bot in watch mode (equivalent to `bun run dev`).
 //
 //   Docker sidecars are started via docker inspect/start/run and polled until
 //   their healthcheck reports "healthy". Python sidecars are spawned directly
-//   from their pre-built venv and given a configurable startup delay.
+//   from their pre-built venv and polled until /health reports a ready status.
 //
 //   Press Ctrl+C to stop everything.
 
@@ -80,8 +80,12 @@ interface PythonSidecar {
   scriptRelPath: string;
   /** extra args passed to the script */
   scriptArgs?: string[];
-  /** milliseconds to wait after spawn before proceeding (default 3s) */
-  startupDelayMs?: number;
+  /** JSON health endpoint; its `status` field must be in readyStatuses. */
+  httpHealthUrl: string;
+  /** milliseconds to wait for the health endpoint (default TOMORI_TTS_HEALTH_TIMEOUT_MS or 180s) */
+  healthTimeoutMs?: number;
+  /** accepted JSON status values, default ["ok"] */
+  readyStatuses?: readonly string[];
 }
 
 type SidecarDef = DockerSidecar | PythonSidecar;
@@ -135,7 +139,8 @@ const SIDECARS: Record<string, SidecarDef> = {
     displayName: "Qwen3-TTS",
     venvRelPath: "servers/tts/qwen3tts/.venv",
     scriptRelPath: "servers/tts/qwen3tts/server.py",
-    startupDelayMs: 5_000,
+    httpHealthUrl: `http://127.0.0.1:${process.env.QWEN3TTS_PORT ?? process.env.TOMORI_TTS_PORT ?? "8012"}/health`,
+    readyStatuses: ["ok", "idle"],
   },
 
   chatterbox: {
@@ -143,7 +148,7 @@ const SIDECARS: Record<string, SidecarDef> = {
     displayName: "Chatterbox TTS",
     venvRelPath: "servers/tts/chatterbox/.venv",
     scriptRelPath: "servers/tts/chatterbox/server.py",
-    startupDelayMs: 5_000,
+    httpHealthUrl: `http://127.0.0.1:${process.env.CHATTERBOX_PORT ?? process.env.TOMORI_TTS_PORT ?? "8011"}/health`,
   },
 
   irodoritts: {
@@ -151,7 +156,7 @@ const SIDECARS: Record<string, SidecarDef> = {
     displayName: "IrodoriTTS",
     venvRelPath: "servers/tts/irodoritts/.venv",
     scriptRelPath: "servers/tts/irodoritts/server.py",
-    startupDelayMs: 8_000,
+    httpHealthUrl: `http://127.0.0.1:${process.env.IRODORI_TTS_PORT ?? process.env.TOMORI_TTS_PORT ?? "8013"}/health`,
   },
 
   cosyvoice3: {
@@ -159,7 +164,7 @@ const SIDECARS: Record<string, SidecarDef> = {
     displayName: "CosyVoice 3",
     venvRelPath: "servers/tts/cosyvoice3/.venv",
     scriptRelPath: "servers/tts/cosyvoice3/server.py",
-    startupDelayMs: 15_000,
+    httpHealthUrl: `http://127.0.0.1:${process.env.COSYVOICE3_PORT ?? process.env.TOMORI_TTS_PORT ?? "8017"}/health`,
   },
 
   whisperx: {
@@ -268,12 +273,19 @@ async function ensureDockerSidecar(def: DockerSidecar): Promise<void> {
 
 
 /**
- * Spawns a Python sidecar server from its pre-built venv and waits
- * `startupDelayMs` milliseconds for it to bind before returning the handle.
+ * Spawns a Python sidecar server from its pre-built venv and waits for its JSON
+ * health response before returning the handle.
  * Throws if the venv is missing (user must run setup first).
  */
 async function startPythonSidecar(def: PythonSidecar): Promise<ReturnType<typeof Bun.spawn>> {
-  const { displayName, venvRelPath, scriptRelPath, scriptArgs = [], startupDelayMs = 3_000 } = def;
+  const {
+    displayName,
+    venvRelPath,
+    scriptRelPath,
+    scriptArgs = [],
+    httpHealthUrl,
+    readyStatuses = ["ok"],
+  } = def;
   const label = pc.magenta(`[${displayName}]`);
 
   const pythonExe = resolvePythonExe(venvRelPath);
@@ -293,12 +305,56 @@ async function startPythonSidecar(def: PythonSidecar): Promise<ReturnType<typeof
     cwd: ROOT,
   });
 
-  // Give the Python HTTP server time to bind its port.
-  console.log(`${label} Waiting ${startupDelayMs / 1000}s for server to initialize...`);
-  await Bun.sleep(startupDelayMs);
-  console.log(`${label} ${pc.green("Started ✓")}`);
+  const defaultHealthTimeoutMs = Number.parseInt(process.env.TOMORI_TTS_HEALTH_TIMEOUT_MS ?? "180000", 10);
+  const healthTimeoutMs = def.healthTimeoutMs ?? (Number.isFinite(defaultHealthTimeoutMs) ? defaultHealthTimeoutMs : 180_000);
+  console.log(`${label} Waiting for JSON readiness at ${httpHealthUrl}...`);
+  await waitForPythonReady(proc, httpHealthUrl, healthTimeoutMs, readyStatuses);
+  console.log(`${label} ${pc.green("Ready ✓")}`);
 
   return proc;
+}
+
+type PythonReadinessResult =
+  | { kind: "ready" }
+  | { kind: "not-ready"; status: string }
+  | { kind: "exited"; code: number };
+
+async function probePythonHealth(url: string, readyStatuses: readonly string[]): Promise<PythonReadinessResult> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(2_000) });
+    if (!response.ok) return { kind: "not-ready", status: `HTTP ${response.status}` };
+    const payload = (await response.json()) as { status?: unknown };
+    const status = typeof payload.status === "string" ? payload.status : "missing status";
+    return readyStatuses.includes(status) ? { kind: "ready" } : { kind: "not-ready", status };
+  } catch {
+    return { kind: "not-ready", status: "unreachable" };
+  }
+}
+
+async function waitForPythonReady(
+  proc: ReturnType<typeof Bun.spawn>,
+  url: string,
+  timeoutMs: number,
+  readyStatuses: readonly string[],
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  const exitResult = proc.exited.then((code): PythonReadinessResult => ({ kind: "exited", code }));
+  let lastStatus = "unreachable";
+
+  while (Date.now() < deadline) {
+    const result = await Promise.race([
+      exitResult,
+      probePythonHealth(url, readyStatuses),
+    ]);
+    if (result.kind === "exited") {
+      throw new Error(`process exited before readiness (exit ${result.code})`);
+    }
+    if (result.kind === "ready") return;
+    lastStatus = result.status;
+    await Bun.sleep(500);
+  }
+
+  throw new Error(`did not become ready within ${timeoutMs / 1000}s (last status: ${lastStatus})`);
 }
 
 

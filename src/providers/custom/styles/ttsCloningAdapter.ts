@@ -145,6 +145,35 @@ export interface TtsCloneBufferRequest {
   };
 }
 
+/** Builds the provider-neutral body sent to a local clone sidecar. */
+export function buildTtsCloneRequestBody(input: {
+  processedScript: string;
+  refAudio: Buffer;
+  refText: string | null;
+  instruct?: string;
+  supportsInstruct: boolean;
+  chatterbox?: TtsCloneBufferRequest["chatterbox"];
+}): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    text: input.processedScript,
+    ref_audio: input.refAudio.toString("base64"),
+    ref_text: input.refText,
+    language: null,
+  };
+
+  if (input.chatterbox) {
+    body.chatterbox_turbo = input.chatterbox.turboEnabled;
+    body.cfg_weight = input.chatterbox.cfgWeight;
+    body.exaggeration = input.chatterbox.exaggeration;
+  }
+
+  if (input.supportsInstruct) {
+    body.instruct = input.instruct?.trim() || null;
+  }
+
+  return body;
+}
+
 /**
  * Calls a local TTS clone server with reference audio supplied directly.
  *
@@ -191,22 +220,14 @@ export async function synthesizeSpeechViaTtsCloneBuffer(request: TtsCloneBufferR
     };
   }
 
-  const body: Record<string, unknown> = {
-    text: processedScript,
-    ref_audio: refAudio.toString("base64"),
-    ref_text: refText,
-    language: null,
-  };
-
-  if (chatterbox) {
-    body.chatterbox_turbo = chatterbox.turboEnabled;
-    body.cfg_weight = chatterbox.cfgWeight;
-    body.exaggeration = chatterbox.exaggeration;
-  }
-
-  if (supportsInstruct) {
-    body.instruct = instruct?.trim() || null;
-  }
+  const body = buildTtsCloneRequestBody({
+    processedScript,
+    refAudio,
+    refText,
+    instruct,
+    supportsInstruct,
+    chatterbox,
+  });
 
   const endpointUrl = endpoint.endpoint_url.replace(/\/+$/, "");
   const headers: Record<string, string> = { "Content-Type": "application/json" };
