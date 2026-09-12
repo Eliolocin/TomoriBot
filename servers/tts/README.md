@@ -12,8 +12,6 @@ Each engine lives in its own subfolder with its own `.venv` to keep dependencies
 | Qwen3-TTS 12Hz 1.7B VoiceDesign (natural-language voice descriptions) | `qwen3tts/server.py --mode voice-design` | 8014 |
 | VoxCPM2 2B (30 languages, clone + VoiceDesign + controllable cloning) | `voxcpm2/` | 8016 |
 
-Port 8015 is intentionally left available for the Fish Audio S2 Pro sidecar proposed separately in PR #85.
-
 ## Prerequisites
 
 - **Python 3.10+**. VoxCPM2 currently requires Python 3.10-3.12.
