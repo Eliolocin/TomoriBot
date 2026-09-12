@@ -15,6 +15,7 @@ import {
   PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
   type ProvidersRouteNamespace,
 } from "@/utils/discord/providersPanelCatalog";
+import { log } from "@/utils/misc/logger";
 import type {
   EndpointProviderPanelEntry,
   ProviderPanelCapability,
@@ -810,7 +811,13 @@ async function addCuratedProvider(
   let providerInstance: Awaited<ReturnType<typeof ProviderFactory.getProviderByName>>;
   try {
     providerInstance = await dependencies.getProvider(provider);
-  } catch {
+  } catch (error) {
+    // Reported to the actor as an unsupported provider, which is only true for the guard above.
+    // Reaching here means construction or loading failed, so the real cause has to be recorded.
+    log.error("Provider could not be constructed while adding a server provider", error as Error, {
+      errorType: "ProviderPanelOperationFailed",
+      metadata: { operation: "addCuratedProvider", provider },
+    });
     return { status: "unsupported-provider" };
   }
   const validation = await providerInstance.validateApiKey(input.apiKey);
@@ -899,7 +906,13 @@ async function addPersonalProvider(input: AddServerProviderInput): Promise<AddSe
   let instance: Awaited<ReturnType<typeof ProviderFactory.getProviderByName>>;
   try {
     instance = await ProviderFactory.getProviderByName(provider);
-  } catch {
+  } catch (error) {
+    // Same confusion as the server path: the actor is told the provider is unsupported when the
+    // truth is that loading or constructing it threw.
+    log.error("Provider could not be constructed while adding a personal provider", error as Error, {
+      errorType: "ProviderPanelOperationFailed",
+      metadata: { operation: "addPersonalProvider", provider },
+    });
     return { status: "unsupported-provider" };
   }
   if (!(await instance.validateApiKey(apiKey)).valid) return { status: "validation-failed" };
@@ -968,7 +981,19 @@ export async function addCustomEndpointConnection(
     endpointUrl,
     apiKey: authToken || null,
   });
-  if (!reachable.ok) return { status: "unreachable", reason: reachable.reason };
+  if (!reachable.ok) {
+    // An expected refusal, so this is a metric and not an incident. It cannot be `log.warn`: the
+    // production level filter drops warn entirely, which is the blind spot this change exists to
+    // close. The reason is carried here because the receipt shows only the safe subset.
+    log.metric("panel_failure_detail", {
+      namespace: "providers",
+      tone: "error",
+      reason: "custom_endpoint_unreachable",
+      apiStyle: input.apiStyle,
+      detail: reachable.reason.slice(0, 200),
+    });
+    return { status: "unreachable", reason: reachable.reason };
+  }
 
   const createdConnectionIds: number[] = [];
   try {
@@ -1006,7 +1031,20 @@ export async function addCustomEndpointConnection(
         : await dependencies.upsertSavedConfig(input.state.server_id, savedConfig as SavedProviderConfigUpsert);
       if (!upserted) throw new Error("Custom endpoint credential snapshot could not be saved");
     }
-  } catch {
+  } catch (error) {
+    // The rollback below can succeed, so this return is the only surviving evidence that anything
+    // went wrong. Binding the error and recording it is what keeps a rolled-back endpoint addition
+    // distinguishable from an ordinary validation refusal.
+    log.error("Custom endpoint connection could not be saved; rolled back created connections", error, {
+      errorType: "CustomEndpointWriteFailed",
+      metadata: {
+        serverDiscId: input.serverDiscId,
+        scopeKind,
+        label,
+        capabilityCount: capabilities.length,
+        createdConnectionCount: createdConnectionIds.length,
+      },
+    });
     if (createdConnectionIds.length > 0) {
       await dependencies.deleteConnections(ownerId, scopeKind, createdConnectionIds);
     }
@@ -1492,7 +1530,17 @@ async function editServerEndpoint(input: EditEndpointInput): Promise<EditEndpoin
         endpointUrl,
         apiKey: credential,
       });
-      if (!reachable.ok) return { status: "unreachable", reason: reachable.reason };
+      if (!reachable.ok) {
+        // Same treatment as the add path: a metric, because warn never reaches production.
+        log.metric("panel_failure_detail", {
+          namespace: "providers",
+          tone: "error",
+          reason: "custom_endpoint_unreachable",
+          apiStyle: connection.api_style,
+          detail: reachable.reason.slice(0, 200),
+        });
+        return { status: "unreachable", reason: reachable.reason };
+      }
     }
   }
 

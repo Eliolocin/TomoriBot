@@ -68,6 +68,7 @@ import {
   type ModerationWhitelistChannelAddScopeData,
   type QuotaConfigState,
 } from "@/utils/moderation/moderationOperations";
+import { log } from "@/utils/misc/logger";
 import { recordPanelActionStat, type RecordPanelActionInput } from "@/utils/stats/panelActionMetrics";
 import { localizer } from "@/utils/text/localizer";
 
@@ -339,7 +340,7 @@ async function repaint(
       channelRemoveTarget,
       roleRemoveTarget,
     }),
-    { locale },
+    { locale, receipt: panelReceipt },
   );
 }
 
@@ -1395,11 +1396,25 @@ export function createModerationInteractionRoute(
             userDiscId: interaction.user?.id ?? "",
           });
         }
+        // A batch that removed some entries and refused others reads as a failure to the actor
+        // while the counter above still counts the removals that did land. A batch where nothing
+        // landed is the more serious outcome. Both are named on the receipt below, which is what
+        // reports them, so counting stays on the chokepoint and only the counts land here.
+        const channelRemovalReason =
+          successCount > 0 ? "whitelist_channel_remove_partial" : "whitelist_channel_remove_total";
+        if (failed) {
+          log.metric("panel_failure_detail", {
+            reason: channelRemovalReason,
+            requested: ids.length,
+            removed: successCount,
+          });
+        }
         const receipt: PanelReceipt = failed
           ? {
               tone: "error",
               heading: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed"),
               detail: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed_detail"),
+              reason: channelRemovalReason,
             }
           : ids.length === 0
             ? {
@@ -1578,6 +1593,7 @@ export function createModerationInteractionRoute(
             tone: "error",
             heading: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed"),
             detail: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed_detail"),
+            reason: "whitelist_channel_remove_failed",
           };
         }
 
@@ -1837,11 +1853,20 @@ export function createModerationInteractionRoute(
             userDiscId: interaction.user?.id ?? "",
           });
         }
+        const roleRemovalReason = successCount > 0 ? "whitelist_role_remove_partial" : "whitelist_role_remove_total";
+        if (failed) {
+          log.metric("panel_failure_detail", {
+            reason: roleRemovalReason,
+            requested: ids.length,
+            removed: successCount,
+          });
+        }
         const receipt: PanelReceipt = failed
           ? {
               tone: "error",
               heading: localizer(route.locale, "commands.moderation.whitelist_role_remove_failed"),
               detail: localizer(route.locale, "commands.moderation.whitelist_role_remove_failed_detail"),
+              reason: roleRemovalReason,
             }
           : ids.length === 0
             ? {
@@ -1973,6 +1998,7 @@ export function createModerationInteractionRoute(
                   tone: "error",
                   heading: localizer(route.locale, "commands.moderation.whitelist_role_remove_failed"),
                   detail: localizer(route.locale, "commands.moderation.whitelist_role_remove_failed_detail"),
+                  reason: "whitelist_role_remove_failed",
                 };
 
         const reloadedScope = await dependencies.resolveScope(interaction, false);
@@ -2178,11 +2204,18 @@ export function createModerationInteractionRoute(
             userDiscId: interaction.user?.id ?? "",
           });
         }
+        if (failed) {
+          log.metric("panel_failure_detail", {
+            reason: "persona_channel_remove_failed",
+            removed: successCount,
+          });
+        }
         const receipt: PanelReceipt = failed
           ? {
               tone: "error",
               heading: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed"),
               detail: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed_detail"),
+              reason: "persona_channel_remove_failed",
             }
           : removed.size === 0
             ? {
@@ -2379,10 +2412,26 @@ export function createModerationInteractionRoute(
             }),
           };
         } else {
+          // The operation carries the caught error out in its result, and the receipt has no room
+          // for it. Without this the only record of a failed quota write is the user's screenshot.
+          log.error(
+            "Failed to update moderation quota settings",
+            result.status === "failed" ? result.error : undefined,
+            {
+              errorType: "DatabaseUpdateError",
+              metadata: {
+                serverId: scope.serverId,
+                quotaType: route.quotaType,
+                status: result.status,
+                ...(result.status === "invalid" ? { reason: result.reason } : {}),
+              },
+            },
+          );
           panelReceipt = {
             tone: "error",
             heading: localizer(route.locale, "commands.moderation.quota_edit_failed"),
             detail: localizer(route.locale, "commands.moderation.quota_edit_failed_detail"),
+            reason: `quota_edit_${result.status}`,
           };
         }
 

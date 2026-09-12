@@ -42,6 +42,7 @@ import type {
   GlobalDiscordState,
 } from "@/types/discord/rawApiTypes";
 import type { TomoriState } from "@/types/db/schema";
+import type { PanelReceipt } from "@/types/discord/panel";
 import { resolveAlterPersonaAvatarAsset, type PersonaAvatarAsset } from "@/utils/discord/personaPanelAvatar";
 import { getLastDbError } from "@/utils/cache/tomoriStateCache";
 import {
@@ -1987,6 +1988,14 @@ export interface GuardedPanelDeliveryOptions {
   sourceInteraction?: unknown;
   /** Flags override, e.g. Ephemeral | IsComponentsV2 for initial reply. */
   flags?: MessageFlags | number;
+  /**
+   * The receipt this payload repaints with, when it carries one.
+   *
+   * Threaded through delivery rather than read back off the payload so the failure signal cannot
+   * cost the payload any of its Discord text budget, and cannot widen a rendered receipt past the
+   * panel prose line limit.
+   */
+  receipt?: PanelReceipt;
 }
 
 /**
@@ -2062,6 +2071,112 @@ export function validateAndFallbackPanelPayload<T>(payload: T, locale = "en-US")
 }
 
 /**
+ * Sink for the `panel_failure` series, injected so this module stays usable without a pool.
+ *
+ * Deliberately not a top-level import of the repository singleton. `interactionCore` is pulled in
+ * by nearly every Discord surface, and a static import would drag the database client into every
+ * one of them, including tests that only want to deliver a panel. The default resolves lazily and
+ * only when a failure actually happens.
+ */
+export interface PanelFailureSampleSink {
+  recordSample(metricName: string, fields: Record<string, number | string>): Promise<void>;
+}
+
+let panelFailureSampleSink: PanelFailureSampleSink | null = null;
+
+/**
+ * Overrides the sample sink, returning the previous one for the caller to restore.
+ *
+ * Mirrors the dependency-object shape `recordPanelActionStat` takes, in the form a module-private
+ * reporter can use: tests install a spy, and production never calls it.
+ */
+export function setPanelFailureSampleSink(sink: PanelFailureSampleSink | null): PanelFailureSampleSink | null {
+  const previous = panelFailureSampleSink;
+  panelFailureSampleSink = sink;
+  return previous;
+}
+
+async function resolvePanelFailureSampleSink(): Promise<PanelFailureSampleSink> {
+  if (panelFailureSampleSink) return panelFailureSampleSink;
+  const { metricSampleRepository } = await import("@/utils/db/repositories/MetricSampleRepository");
+  return metricSampleRepository;
+}
+
+/**
+ * Writes the failure to Postgres alongside the log stream, without awaiting it.
+ *
+ * `recordSample` already never throws and never rejects, so a failing pool cannot break delivery.
+ * It is still fire-and-forget rather than awaited because it performs an INSERT and can ride a
+ * prune on the write path, and this call happens before the Discord request. Awaiting it would put
+ * a database round trip in front of every failure repaint, which is the one thing the chokepoint's
+ * contract forbids.
+ *
+ * The fields are passed as an object, never a `JSON.stringify` result: under Bun's driver a
+ * stringified value binds as text and `::jsonb` turns it into a scalar string, which makes every
+ * `fields->>'...'` read in Grafana return null. See migration 064 and `recordSample`'s own note.
+ */
+function recordPanelFailureSample(fields: Record<string, number | string>): void {
+  void (async () => {
+    try {
+      const sink = await resolvePanelFailureSampleSink();
+      await sink.recordSample("panel_failure", fields);
+    } catch {
+      // A sink that cannot be resolved or reached is already reported by the repository's own
+      // once-per-outage warning; repeating it here would add a line per failure.
+    }
+  })();
+}
+
+/**
+ * Single reporting point for every panel that repaints itself as a failed or warning receipt.
+ *
+ * Route code reports an expected refusal by returning a status object rather than throwing, so the
+ * router's exception handler never sees it and the user's red receipt leaves no trace anywhere.
+ * Every panel transport already funnels through {@link deliverGuardedPanel}, which makes it the one
+ * place a receipt can be observed without an opt-in line in each of the roughly sixteen `repaint`
+ * helpers.
+ *
+ * Emitted as a metric rather than an error record: the metric level is never filtered out of the
+ * production stream, while `error_logs` is reserved for incidents. Most of these receipts are
+ * expected outcomes the actor can correct (bad input, stale panel, unavailable read), and writing
+ * every one of them at error level is the storm the repository's circuit breaker exists to absorb.
+ * The genuinely broken paths log at error level where their cause is still in scope.
+ *
+ * Both sinks carry the same fields, so `stat_counters.panel_action` (successes) and
+ * `metric_samples.panel_failure` (failures) join on `metric_key` / `fields->>'reason'` and answer
+ * which controls fail and how often relative to succeeding, in one query.
+ */
+function reportPanelFailure(
+  target: GuardedPanelDeliveryTarget | ((payload: unknown) => Promise<unknown>),
+  options?: GuardedPanelDeliveryOptions,
+): void {
+  const receipt = options?.receipt;
+  if (!receipt || (receipt.tone !== "error" && receipt.tone !== "warning")) return;
+
+  try {
+    const customId =
+      typeof target === "object" && target !== null && "customId" in target ? target.customId : undefined;
+    // A function target and a slash-command interaction carry no route id, so the namespace falls
+    // back rather than guessing. Queries should still group on namespace + tone, and a call site
+    // that knows its cause sets `receipt.reason` for an exact key.
+    const namespace = typeof customId === "string" ? (customId.split(":")[0] ?? "unknown") : "unknown";
+    const fields = {
+      locale: options?.locale ?? "en-US",
+      tone: receipt.tone,
+      // Deliberately not the heading as the grouping key: a localized heading files the same defect
+      // under a different label per locale.
+      reason: receipt.reason ?? `${namespace}_${receipt.tone}`,
+      namespace,
+      heading: receipt.heading,
+    };
+    log.metric("panel_failure", fields);
+    recordPanelFailureSample(fields);
+  } catch {
+    // Diagnostics must never be able to break the delivery they describe.
+  }
+}
+
+/**
  * Universal guarded delivery helper used across all panel transports (initial reply,
  * editReply, component update, anchor replacement, and avatar-bearing paths).
  *
@@ -2076,6 +2191,8 @@ export async function deliverGuardedPanel<T = unknown>(
 ): Promise<T> {
   const locale = options?.locale ?? "en-US";
   let deliveryPayload = validateAndFallbackPanelPayload(payload, locale) as Record<string, unknown>;
+
+  reportPanelFailure(target, options);
 
   if (options?.method === "reply" && options?.flags !== undefined) {
     deliveryPayload = {
@@ -2567,7 +2684,13 @@ export async function replyPaginatedChoices(
                 interaction: buttonInteraction,
               };
             } catch (selectCallbackError) {
-              log.warn("Error occurred during onSelect callback execution:", selectCallbackError);
+              // The callback failed after the actor chose an item, so the user is about to be told
+              // the operation failed while nothing durable records why. Escalated from warn, which
+              // the production level filter drops.
+              await log.error("onSelect callback failed in replyPaginatedChoices", selectCallbackError, {
+                errorType: "PaginationSelectCallbackError",
+                metadata: { userDiscordId: interaction.user.id, absoluteIndex },
+              });
               await buttonInteraction.reply({
                 embeds: [
                   createStandardEmbed(locale, {
@@ -2611,9 +2734,13 @@ export async function replyPaginatedChoices(
               selectedItem,
             };
           } catch (selectCallbackError) {
-            // Error occurred within the onSelect callback (e.g., DB update failed in the command)
-            log.warn("Error occurred during onSelect callback execution:", selectCallbackError); // Log as warn, the command's callback should use log.error with context
-
+            // The callback failed after the actor chose an item, so the user is about to be told the
+            // operation failed while nothing durable records why. Escalated from warn, which the
+            // production level filter drops, and paired with the ambient interaction context.
+            await log.error("onSelect callback failed in replyPaginatedChoices", selectCallbackError, {
+              errorType: "PaginationSelectCallbackError",
+              metadata: { userDiscordId: interaction.user.id, absoluteIndex },
+            });
             await interaction.editReply({
               embeds: [
                 createStandardEmbed(locale, {
@@ -2632,8 +2759,18 @@ export async function replyPaginatedChoices(
             };
           }
         }
-      } catch (_error) {
-        log.warn(`Pagination interaction timed out for user ${interaction.user.id}`); // Log timeout specifically
+      } catch (error) {
+        // Only expiry is routine. An onSelect callback that threw, a deleted panel message, or a
+        // removed channel all land here too, and `log.warn` is filtered out of the production
+        // stream, so those would otherwise reach the user as a bare timeout with no record.
+        if (isCollectorTimeoutError(error)) {
+          log.warn(`Pagination interaction timed out for user ${interaction.user.id}`); // Log timeout specifically
+        } else {
+          await log.error("Pagination interaction ended abnormally in replyPaginatedChoices", error, {
+            errorType: "PaginationCollectorEnded",
+            metadata: { userDiscordId: interaction.user.id, currentPage },
+          });
+        }
         await interaction.editReply({
           embeds: [
             createStandardEmbed(locale, {
@@ -2911,7 +3048,12 @@ export async function replyPaginatedPersonaChoicesV2(
                 interaction: buttonInteraction,
               };
             } catch (selectCallbackError) {
-              log.warn("Error occurred during onSelect callback execution:", selectCallbackError);
+              // Same blind spot as the sibling paginator: the caller's callback decides whether the
+              // write landed, and warn does not survive the production level filter.
+              await log.error("onSelect callback failed in replyPaginatedPersonaChoicesV2", selectCallbackError, {
+                errorType: "PaginationSelectCallbackError",
+                metadata: { userDiscordId: interaction.user.id, absoluteIndex },
+              });
               await buttonInteraction.reply({
                 embeds: [
                   createStandardEmbed(locale, {
@@ -2952,7 +3094,10 @@ export async function replyPaginatedPersonaChoicesV2(
               selectedItem,
             };
           } catch (selectCallbackError) {
-            log.warn("Error occurred during onSelect callback execution:", selectCallbackError);
+            await log.error("onSelect callback failed in replyPaginatedPersonaChoicesV2", selectCallbackError, {
+              errorType: "PaginationSelectCallbackError",
+              metadata: { userDiscordId: interaction.user.id, absoluteIndex },
+            });
             await interaction.editReply({
               components: buildV2StatusComponents(
                 locale,

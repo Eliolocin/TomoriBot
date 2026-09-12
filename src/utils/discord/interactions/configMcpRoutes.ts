@@ -7,7 +7,11 @@ import {
 import type { PanelReceipt } from "@/types/discord/panel";
 import type { ConfigPanelRoute } from "@/utils/discord/configPanelCatalog";
 import { CONFIG_MCP_PANEL_ROUTE_ADAPTER } from "@/utils/discord/configPanelCatalog";
-import { performPanelAction, validateAndFallbackPanelPayload } from "@/utils/discord/interactions/panelController";
+import {
+  deliverGuardedPanel,
+  performPanelAction,
+  validateAndFallbackPanelPayload,
+} from "@/utils/discord/interactions/panelController";
 import {
   isConfigRouteAuthorized,
   resolveConfigActor,
@@ -158,6 +162,7 @@ export async function handleConfigMcpModalOpen(
       return true;
     }
     const mcpRead = await dependencies.loadMcpRead(scope.personas[0]?.server_id ?? 0);
+    const receipt = deniedReceipt(route.locale);
     const panel = buildConfigPanelPayload({
       locale: route.locale,
       actor,
@@ -167,11 +172,15 @@ export async function handleConfigMcpModalOpen(
       selectedPersonaId: null,
       readStatus: scope.readStatus,
       mcpRead,
-      receipt: deniedReceipt(route.locale),
+      receipt,
     });
-    await interaction.reply({
-      ...panel,
+    // Through guarded delivery rather than a raw reply so this refusal stays observable: it is the
+    // only permission denial that reaches a first-time reply instead of a repaint.
+    await deliverGuardedPanel(interaction, panel, {
+      locale: route.locale,
+      method: "reply",
       flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+      receipt,
     });
     return true;
   }

@@ -229,7 +229,7 @@ async function renderStPresetsPanel(
       receipt: panelReceipt,
       routes,
     }),
-    { locale },
+    { locale, receipt: panelReceipt },
   );
 }
 

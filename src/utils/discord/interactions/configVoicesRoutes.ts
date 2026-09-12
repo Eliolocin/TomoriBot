@@ -310,11 +310,12 @@ export function configVoicesPreflightReply(
   return { content: `${receipt.heading}\n${receipt.detail}`, flags: MessageFlags.Ephemeral };
 }
 
-function genericUpdateFailedReceipt(locale: string): { tone: "error"; heading: string; detail: string } {
+function genericUpdateFailedReceipt(locale: string, reason = "voice_update_failed"): PanelReceipt {
   return {
     tone: "error",
     heading: localizer(locale, "general.errors.update_failed_title"),
     detail: localizer(locale, "general.errors.update_failed_description"),
+    reason,
   };
 }
 

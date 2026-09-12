@@ -164,7 +164,20 @@ export async function addVoiceSample(
     timeoutMs: 30_000,
     knownSize: input.upload.size,
   });
-  if (!downloadResult.success || !downloadResult.buffer) return { status: "download-failed" };
+  if (!downloadResult.success || !downloadResult.buffer) {
+    // A refused or failed attachment download is the only reason a valid upload never reaches
+    // storage. The receipt shows a generic failure, so the reason has to survive here.
+    log.error("Voice sample attachment download failed", undefined, {
+      errorType: "VoiceSampleDownloadFailed",
+      metadata: {
+        serverId: input.serverId,
+        contentType: input.upload.contentType,
+        sizeBytes: input.upload.size,
+        reason: downloadResult.error ?? "no-buffer",
+      },
+    });
+    return { status: "download-failed" };
+  }
 
   const rawBuffer = downloadResult.buffer;
   let durationSecs = 0;
@@ -193,7 +206,13 @@ export async function addVoiceSample(
 
   const durationMs = Math.round(durationSecs * 1000);
   const sampleId = await deps.insertVoiceSample(input.serverId, input.sampleName, input.refText, durationMs);
-  if (!sampleId) return { status: "write-failed" };
+  if (!sampleId) {
+    log.error("Voice sample row could not be inserted", undefined, {
+      errorType: "DatabaseInsertError",
+      metadata: { serverId: input.serverId, durationMs },
+    });
+    return { status: "write-failed" };
+  }
 
   const storedReference = await deps.storeVoiceSample({
     serverId: input.serverId,
@@ -201,6 +220,11 @@ export async function addVoiceSample(
     buffer: wavBuffer,
   });
   if (!storedReference) {
+    // Storage failed, not cleanup, so this is the line that explains the missing sample.
+    log.error("Voice sample audio could not be stored", undefined, {
+      errorType: "VoiceSampleStorageFailed",
+      metadata: { serverId: input.serverId, sampleId },
+    });
     await deps
       .deleteVoiceSample(sampleId)
       .catch((err: unknown) => log.warn("[VoiceAdd] Failed to delete voice sample record after storage failure", err));

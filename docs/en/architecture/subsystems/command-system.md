@@ -93,6 +93,88 @@ Multi-step modal continuations and collection-derived operations (such as person
 
 Do not move existing collectors to the global path merely because the registry exists. Use global routing only when the message is intended to outlive a bounded command session and every interaction can reconstruct its state from the custom ID plus durable data. Continue to use the anchor workflow for multi-step writes, validation, permissions, and cache invalidation that belong to one command session.
 
+### Panel failure observability
+
+A panel reports an expected refusal by returning a status object (`{ status: "write-failed" }`) and
+repainting with a red receipt. It does not throw, so the router's exception handler never sees it and
+the actor's failure leaves no trace unless something else records it. Two rules keep that class of
+failure traceable.
+
+**Every receipt repaint is observable.** `deliverGuardedPanel` takes the receipt in its delivery
+options and emits one `panel_failure` metric for an `error` or `warning` tone, carrying the locale,
+the tone, the namespace parsed from the interaction's custom ID, and a `reason` key. The
+per-namespace `repaint` helpers pass their receipt through, so a panel that repaints as failed is
+countable in production without each of the roughly 149 receipt literals opting in.
+
+The failure goes to both sinks with the same fields: `log.metric` for the host JSONL that survives a
+container recreate, and `metricSampleRepository.recordSample("panel_failure", fields)` for the
+Postgres row Grafana can graph. The database write is fire-and-forget and never awaited, because it
+can ride a prune on the write path and this runs before the Discord request; awaiting it would put a
+round trip in front of every failure repaint. The sink resolves lazily through
+`setPanelFailureSampleSink`, so importing `interactionCore` never drags the database client into a
+caller that only wants to deliver a panel, and tests can deliver without a live pool.
+
+The receipt travels beside the payload rather than inside it. Embedding a marker in the rendered
+content would spend the payload's Discord text budget and could push a receipt line past the panel
+prose width limit; passing it as an option keeps the outgoing payload byte-for-byte what the caller
+built.
+
+That makes the failure rows joinable against successes, which live in `stat_counters` as
+`panel_action`. A query joining `stat_counters.metric_key` to `metric_samples.fields->>'reason'`
+answers which controls fail and how often relative to succeeding, without correlating two log streams
+by hand.
+
+Successes have their own blind spot, closed the same way. `recordPanelActionStat` buffers its counter
+write and cannot observe a later flush failure, so a dead success counter would leave failures
+looking like the whole story. When the write path itself raises it reports `panel_action_failure`
+once per outage rather than once per action, and re-arms after the next write that reaches the
+recorder. That report is a metric, not `log.warn` (dropped by production's level pin) and not
+`log.error` (which would attempt an `error_logs` insert down the same pool that just failed).
+
+**`deliverGuardedPanel` is the only emitter of `panel_failure`.** A route that counts a failure
+itself and then repaints with a receipt would count the same failure twice, under two reason keys,
+so a site that needs to record detail a receipt cannot carry emits `panel_failure_detail` instead
+and names its cause on the receipt. Counting queries therefore stay on `panel_failure`, and a
+drill-down joins the two on `reason`. `tests/unit/discord/panelFailureSingleEmission.test.ts` scans
+the source to hold that invariant, because no test over the delivery helper can see a second
+emitter.
+
+**Group on `reason`, never on `heading`.** `PanelReceipt.reason` is an optional machine key naming
+the cause (`endpoint_add_unreachable`, `setup_commit_failed`). A receipt that does not set one falls
+back to `<namespace>_<tone>`, and a target with no route id falls back to `unknown`. The heading is
+localized, so grouping on it files one defect under a different label per locale.
+
+Two delivery paths bypass the chokepoint and stay out of the metric: a slash-command interaction
+carries no route id, and the notice payloads built by `buildTransferNoticePayload` carry no receipt
+object. A call site on either path that wants reporting passes a receipt explicitly, which is what
+the import-failure notices and the `/setup` terminal states do.
+
+**Genuinely broken paths log at error level where the cause is still in scope.** The `panel_failure`
+metric is deliberately not an `error_logs` row: most receipts are expected outcomes the actor can
+correct (bad input, a stale panel, an unavailable read), and the production log level filters `warn`
+out entirely, so neither `log.error` for all of them nor `log.warn` for any of them is right. Paths
+where a rollback succeeded, a cause would otherwise be discarded, or a caught error was never read
+call `log.error` at the point the cause still exists. That covers the thrown-away cause in the
+custom endpoint write rollback, the provider-construction failures reported to the actor as an
+unsupported provider, the eight moderation write catches that discarded their error, the moderation
+quota result's unused `error` field, the cross-server memory toggle, and the voice sample download,
+insert, and storage failures.
+
+An expected refusal that still needs to reach the production stream uses `log.metric`, not
+`log.warn`: an unreachable custom endpoint and an unparseable preset upload are both recorded that
+way, because the reason is diagnostic even though the failure is the actor's to correct. Their
+per-failure detail goes to `panel_failure_detail`, with the cause named on the receipt so the count
+still comes from the chokepoint.
+
+Most receipts still fall back to `<namespace>_<tone>`, which groups a whole panel rather than a
+cause. Explicit reasons exist where the cause is already known at the site: providers, moderation
+quota, moderation batch removals, transfer imports, and the `/setup` terminal states. Widening that
+coverage is additive and does not change the counting contract.
+
+Collector-owned pagination helpers (`replyPaginatedChoices`, `replyPaginatedPersonaChoicesV2`)
+follow the same split: an expiry stays at `warn`, while a callback failure or an abnormal collector
+end logs at error level with the interaction context.
+
 ### The `/setup` wizard
 
 `/setup` is the largest consumer of the global route path. `src/utils/discord/interactions/setupRoutes.ts`
