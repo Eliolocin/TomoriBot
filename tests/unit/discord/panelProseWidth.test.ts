@@ -11,7 +11,12 @@ import {
   type PersonalConfigModelDisplayInfo,
 } from "@/utils/discord/ui/personalConfigPanel";
 import { buildPersonalMemoriesPanelPayload } from "@/utils/discord/ui/personalMemoriesPanel";
-import { buildSetupSuccessPayload } from "@/utils/discord/ui/setupPanel";
+import {
+  buildSetupSuccessPayload,
+  buildSetupWizardPayload,
+  type SetupSettingsCatalogs,
+} from "@/utils/discord/ui/setupPanel";
+import { SETUP_DRAFT_SCHEMA_VERSION, type SetupDraftRecord } from "@/types/discord/setupWizard";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 
 await initializeLocalizer();
@@ -581,5 +586,113 @@ describe("panel prose width", () => {
     for (const payload of cases) {
       expect(collectProseWidthViolations(payload)).toEqual([]);
     }
+  });
+
+  /**
+   * The wizard anchor is what the actor reviews before committing, and every quote row under a step
+   * is composed from a stored draft value rather than from a locale template. The static scan above
+   * only sees what sits inside a `content:` literal, so it measures none of these rows: the endpoint
+   * label, the custom model code, and the two catalog preset names each reach the longest value their
+   * own editor accepts, and are truncated for display before they land here.
+   */
+  it("holds the setup wizard anchor to 65 characters for every draft state", () => {
+    const maxEndpointLabel = "e".repeat(40);
+    const maxModelCode = "m".repeat(200);
+    const maxProviderId = "g".repeat(40);
+    const maxPersonaName = "p".repeat(100);
+    const maxPromptName = "r".repeat(100);
+
+    const catalogs: SetupSettingsCatalogs = {
+      personas: [{ id: 7, name: maxPersonaName, description: "A steady, watchful companion." }],
+      prompts: [{ name: maxPromptName, description: "The standard reply style." }],
+      promptTexts: new Map([[maxPromptName, "You are Tomori."]]),
+    };
+
+    const maxSettings = {
+      presetId: 7,
+      humanizer: 3,
+      timezoneOffset: -12,
+      systemPrompt: { kind: "preset" as const, presetName: maxPromptName },
+    };
+
+    const build = (
+      overrides: Partial<SetupDraftRecord>,
+      isHosted: boolean,
+      settingsCatalogs: SetupSettingsCatalogs | null = catalogs,
+    ) =>
+      buildSetupWizardPayload({
+        draft: {
+          schemaVersion: SETUP_DRAFT_SCHEMA_VERSION,
+          actorDiscId: "actor-1234567890",
+          workspaceKey: "workspace-1234567890",
+          context: "guild",
+          providerAccess: null,
+          startingSettings: null,
+          policiesAccepted: false,
+          requiresPolicies: false,
+          ...overrides,
+        },
+        locale: "en-US",
+        isHosted,
+        nonce: "nonce-abc-12345",
+        settingsCatalogs,
+      });
+
+    const cases: Array<[string, ReturnType<typeof build>]> = [
+      ["pending hosted", build({ requiresPolicies: true }, true)],
+      [
+        "ready with maximum catalog names",
+        build(
+          {
+            requiresPolicies: true,
+            policiesAccepted: true,
+            providerAccess: {
+              mode: "catalog",
+              provider: maxProviderId,
+              encryptedApiKey: Buffer.from("key"),
+              keyVersion: 1,
+            },
+            startingSettings: maxSettings,
+          },
+          true,
+        ),
+      ],
+      [
+        "custom endpoint at maximum label and model length",
+        build(
+          {
+            providerAccess: {
+              mode: "custom-endpoint",
+              connection: {
+                label: maxEndpointLabel,
+                apiStyle: "openai-compatible",
+                endpointUrl: "https://example.invalid/v1",
+                encryptedAuthToken: null,
+                keyVersion: 1,
+              },
+              textModel: { modelCode: maxModelCode, numCtx: 131072, capabilities: ["tools"] },
+            },
+            startingSettings: maxSettings,
+          },
+          false,
+        ),
+      ],
+      [
+        "settings re-pended by catalog drift",
+        build({ providerAccess: { mode: "user-byok" }, startingSettings: maxSettings, context: "dm" }, false, {
+          personas: [],
+          prompts: [],
+          promptTexts: new Map(),
+        }),
+      ],
+      ["settings that could not be checked", build({ startingSettings: maxSettings, context: "dm" }, false, null)],
+    ];
+
+    const violations = cases.flatMap(([label, payload]) =>
+      collectProseWidthViolations(payload).map(
+        (violation) => `${label}: ${violation.width} > ${violation.budget}: ${violation.line}`,
+      ),
+    );
+    expect(violations).toEqual([]);
   });
 });

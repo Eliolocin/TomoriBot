@@ -17,7 +17,7 @@ import { afterEach, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { AttachmentBuilder, ComponentType, MessageFlags } from "discord.js";
 import type { ChatInputCommandInteraction, Message } from "discord.js";
 import * as componentsV2Limits from "@/utils/discord/ui/componentsV2Limits";
-import { parseConfigPanelRoute } from "@/utils/discord/configPanelCatalog";
+import { CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER, parseConfigPanelRoute } from "@/utils/discord/configPanelCatalog";
 import { handleConfigMcpRoutes } from "@/utils/discord/interactions/configMcpRoutes";
 import type { ConfigRouteDependencies } from "@/utils/discord/interactions/configRouteContext";
 import { createMemoriesInteractionRoute } from "@/utils/discord/interactions/memoriesRoutes";
@@ -626,8 +626,11 @@ describe("delivery-tier construction validation", () => {
       },
       {
         name: "st presets",
-        route: createStPresetsInteractionRoute({ resolveScope: async () => null }),
-        customId: "st-presets:v1:retry:en-US",
+        route: createStPresetsInteractionRoute({
+          routeAdapter: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
+          resolveScope: async () => null,
+        }),
+        customId: "config:v2:st-presets-retry:en-US",
         interactionKind: "button" as const,
         guildId: undefined,
       },

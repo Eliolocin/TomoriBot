@@ -73,7 +73,9 @@ bun run dev
 ```
 
 When you see `TomoriBot up and running!`, go to Discord and run `/setup` in your
-server to add your AI provider key and initialize the bot. See the
+server to connect an AI provider and initialize the bot. The command opens a guided
+checklist panel, and nothing is written until you press **Finish Setup**; see
+[The `/setup` command](/self-hosting/setup-wizard/#the-setup-command) for the steps and the
 [Quickstart](/introduction/quickstart/) for the in-Discord side.
 
 Use `bun run launch` instead of `bun run dev` if you want optional sidecars (SearXNG, Crawl4AI, local TTS/STT) launched alongside the bot:

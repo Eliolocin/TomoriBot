@@ -193,11 +193,6 @@ export const COMPONENTS_V2_PRODUCER_MANIFEST: readonly ProducerManifestEntry[] =
     },
   },
   {
-    modulePath: "src/utils/discord/ui/anchorModelFlow.ts",
-    reason: "Anchor model setup flow step messages",
-    coverage: { kind: "suite", suites: ["tests/unit/discord/componentsV2DeclaredProducerSmoke.test.ts"] },
-  },
-  {
     modulePath: "src/utils/discord/ui/interactionCore.ts",
     reason: "Core interaction error notices and terminal fallbacks",
     coverage: { kind: "suite", suites: ["tests/unit/discord/componentsV2DeclaredProducerSmoke.test.ts"] },

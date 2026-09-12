@@ -269,7 +269,7 @@ const MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"]>([
 
 /** Sprite routes repaint their own page rather than the Persona General default. */
 /** Naming edits repaint Persona > Naming Habits, which is where their controls live. */
-const NAMING_ACTIONS = new Set<ConfigPanelRoute["action"]>(["naming-open", "naming-submit", "naming-style-select"]);
+const NAMING_ACTIONS = new Set<ConfigPanelRoute["action"]>(["naming-open", "naming-submit"]);
 
 const SPRITE_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "sprite-select",
@@ -654,10 +654,6 @@ const defaultDependencies: ConfigRouteDependencies = {
 function findExactPersona(personas: readonly TomoriState[], personaId: number | null): TomoriState | null {
   if (personaId === null) return null;
   return personas.find((persona) => persona.persona_id === personaId) ?? null;
-}
-
-function parseAddressingStyleValue(value: string | null): AddressingStyle | null {
-  return value === "masculine" || value === "feminine" || value === "neutral" ? value : null;
 }
 
 function hasManageableReason(group: { reasonText: string }): boolean {
@@ -2834,7 +2830,6 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "page" ||
         route.action === "persona-page-select" ||
         route.action === "persona-select" ||
-        route.action === "naming-style-select" ||
         route.action === "attribute-select" ||
         route.action === "dialogue-select" ||
         route.action === "humanizer-select" ||
@@ -3179,10 +3174,7 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         category = route.category;
       }
 
-      let namingStyle: AddressingStyle | undefined = "style" in route ? route.style : undefined;
-      if (route.action === "naming-style-select") {
-        namingStyle = parseAddressingStyleValue(selectedValue) ?? "neutral";
-      }
+      const namingStyle: AddressingStyle | undefined = "style" in route ? route.style : undefined;
 
       let requestedPersonaId = personaId;
       if (route.action === "persona-select" && selectedValue) {

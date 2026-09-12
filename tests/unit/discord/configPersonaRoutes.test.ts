@@ -493,7 +493,6 @@ const WIRE_CONTRACT_V2: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     "config:v2:rename-submit:en-US:55:nonce1234567",
     { action: "rename-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
-  ["config:v2:naming-style:en-US:55", { action: "naming-style-select", locale: "en-US", personaId: 55 }],
   [
     "config:v2:naming-open:en-US:55:neutral",
     { action: "naming-open", locale: "en-US", personaId: 55, style: "neutral" },
@@ -1510,31 +1509,6 @@ describe("config route write behavior", () => {
     const rendered = JSON.stringify(harness.edits.at(-1));
     expect(rendered).toContain(buildConfigRouteId({ action: "sprite-select", locale: "en-US", personaId: 55 }));
     expect(rendered).not.toContain(buildConfigRouteId({ action: "sprite-select", locale: "en-US", personaId: 999 }));
-  });
-
-  it("keeps the naming editor on the style the select submitted", async () => {
-    const persona = makePersona({
-      persona_id: 55,
-      persona_nickname: "Aphel",
-      naming_config: { prefixes: { masculine: "Sir" }, suffixes: {}, addressTerms: {} },
-    } as Partial<TomoriState> & { persona_id: number });
-    const harness = makeHarness({ personas: [persona], refreshedPersonas: [persona] });
-
-    await dispatch(
-      harness,
-      makeInteraction({
-        customId: buildConfigRouteId({ action: "naming-style-select", locale: "en-US", personaId: 55 }),
-        kind: "select",
-        values: ["masculine"],
-        harness,
-      }),
-    );
-
-    const rendered = JSON.stringify(harness.edits.at(-1));
-    expect(rendered).toContain(
-      buildConfigRouteId({ action: "naming-open", locale: "en-US", personaId: 55, style: "masculine" }),
-    );
-    expect(rendered).toContain("Sir");
   });
 });
 

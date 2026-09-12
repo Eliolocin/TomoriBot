@@ -21,7 +21,6 @@ import {
 import { createNonce } from "@/utils/discord/panelRouteTokens";
 import {
   MAX_NODES_PER_MODAL_PAGE,
-  ST_PRESETS_PANEL_ROUTE_ADAPTER,
   type StPresetsPanelRoute,
   type StPresetsPanelRouteAdapter,
 } from "@/utils/discord/stPresetsPanelCatalog";
@@ -63,7 +62,7 @@ export interface StPresetsRouteDependencies {
     interaction: ButtonInteraction | StringSelectMenuInteraction,
     locale: string,
     nonce: string,
-    routes?: StPresetsPanelRouteAdapter,
+    routes: StPresetsPanelRouteAdapter,
   ): Promise<void>;
   showNodesModal(
     interaction: ButtonInteraction | StringSelectMenuInteraction,
@@ -72,13 +71,13 @@ export interface StPresetsRouteDependencies {
     nodes: StPresetNodeRow[],
     pageOffset: number,
     nonce: string,
-    routes?: StPresetsPanelRouteAdapter,
+    routes: StPresetsPanelRouteAdapter,
   ): Promise<void>;
   takeFileUpload(interactionId: string, nonce: string): APIAttachment | undefined;
   takeNodeCheckboxValues(interactionId: string, nonce: string, groupIndex: number): string[] | undefined;
   storeNodeSnapshot(nonce: string, snapshot: { presetId: number; identifiers: string[] }): void;
   takeNodeSnapshot(nonce: string): { presetId: number; identifiers: string[] } | undefined;
-  routeAdapter?: StPresetsPanelRouteAdapter;
+  routeAdapter: StPresetsPanelRouteAdapter;
   isAuthorized?(
     interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
     route: StPresetsPanelRoute,
@@ -212,9 +211,9 @@ async function renderStPresetsPanel(
   locale: string,
   scope: StPresetsScope,
   page: StPresetsPanelPage,
+  routes: StPresetsPanelRouteAdapter,
   panelReceipt?: PanelReceipt,
   rangeIndex?: number,
-  routes: StPresetsPanelRouteAdapter = ST_PRESETS_PANEL_ROUTE_ADAPTER,
 ): Promise<void> {
   await deliverGuardedPanel(
     interaction,
@@ -255,7 +254,7 @@ function requireStringSelect(interaction: GlobalRoutableInteraction, action: str
 }
 
 export function createStPresetsInteractionRoute(
-  overrides: Partial<StPresetsRouteDependencies> = {},
+  overrides: Partial<StPresetsRouteDependencies> & { routeAdapter: StPresetsPanelRouteAdapter },
 ): GlobalInteractionRoute {
   const dependencies: StPresetsRouteDependencies = {
     resolveScope: defaultResolveScope,
@@ -277,7 +276,7 @@ export function createStPresetsInteractionRoute(
     takeNodeSnapshot,
     ...overrides,
   };
-  const routeAdapter = dependencies.routeAdapter ?? ST_PRESETS_PANEL_ROUTE_ADAPTER;
+  const routeAdapter = dependencies.routeAdapter;
   const authorizeRoute = (interaction: GlobalRoutableInteraction, route: StPresetsPanelRoute): boolean =>
     dependencies.isAuthorized?.(interaction, route) ?? isAuthorized(interaction);
   const repaintRoute = (
@@ -290,7 +289,7 @@ export function createStPresetsInteractionRoute(
   ): Promise<void> =>
     dependencies.repaint
       ? dependencies.repaint(interaction, locale, scope, page, panelReceipt, rangeIndex, routeAdapter)
-      : renderStPresetsPanel(interaction, locale, scope, page, panelReceipt, rangeIndex, routeAdapter);
+      : renderStPresetsPanel(interaction, locale, scope, page, routeAdapter, panelReceipt, rangeIndex);
   const repaint = repaintRoute;
   const handleImmediateDenied = async (
     interaction: ButtonInteraction | StringSelectMenuInteraction,

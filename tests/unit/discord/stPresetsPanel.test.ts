@@ -7,14 +7,8 @@ import {
   DISCORD_MESSAGE_TOTAL_COMPONENTS_MAX,
   validateComponentsV2MessageLimits,
 } from "@/utils/discord/ui/componentsV2Limits";
-import {
-  buildStPresetsRouteId,
-  buildStPresetsRouteSegments,
-  listStPresetsPanelActions,
-  parseStPresetsPanelRoute,
-  ST_PRESETS_ROUTE_CODECS,
-  type StPresetsPanelRoute,
-} from "@/utils/discord/stPresetsPanelCatalog";
+import { CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER } from "@/utils/discord/configPanelCatalog";
+import type { StPresetsPanelRoute } from "@/utils/discord/stPresetsPanelCatalog";
 import {
   buildAddStPresetModal,
   buildNodesToggleModal,
@@ -63,65 +57,70 @@ function receipt(tone: PanelReceipt["tone"]): PanelReceipt {
 }
 
 describe("ST Presets route codec", () => {
-  // These literal IDs record the v1 bytes already-open Discord panels send. A shared codec can
-  // move encoder and decoder fields together while round trips stay green, so this fixture must
-  // remain independent of the builder it constrains.
   const WIRE_CONTRACT_V1: ReadonlyArray<
     readonly { action: StPresetsPanelRoute["action"]; customId: string; parsed: StPresetsPanelRoute }
   > = [
-    { action: "select", customId: "st-presets:v1:select:en-US", parsed: { action: "select", locale: "en-US" } },
-    { action: "retry", customId: "st-presets:v1:retry:en-US", parsed: { action: "retry", locale: "en-US" } },
-    { action: "none", customId: "st-presets:v1:none:en-US", parsed: { action: "none", locale: "en-US" } },
-    { action: "disable", customId: "st-presets:v1:disable:en-US", parsed: { action: "disable", locale: "en-US" } },
-    { action: "add-open", customId: "st-presets:v1:add-open:en-US", parsed: { action: "add-open", locale: "en-US" } },
+    { action: "select", customId: "config:v2:st-presets-select:en-US", parsed: { action: "select", locale: "en-US" } },
+    { action: "retry", customId: "config:v2:st-presets-retry:en-US", parsed: { action: "retry", locale: "en-US" } },
+    { action: "none", customId: "config:v2:st-presets-none:en-US", parsed: { action: "none", locale: "en-US" } },
+    {
+      action: "disable",
+      customId: "config:v2:st-presets-disable:en-US",
+      parsed: { action: "disable", locale: "en-US" },
+    },
+    {
+      action: "add-open",
+      customId: "config:v2:st-presets-add-open:en-US",
+      parsed: { action: "add-open", locale: "en-US" },
+    },
     {
       action: "range",
-      customId: "st-presets:v1:range:en-US:2",
+      customId: "config:v2:st-presets-range:en-US:2",
       parsed: { action: "range", locale: "en-US", rangeIndex: 2 },
     },
     {
       action: "add-submit",
-      customId: "st-presets:v1:add-submit:en-US:nonce123456",
+      customId: "config:v2:st-presets-add-submit:en-US:nonce123456",
       parsed: { action: "add-submit", locale: "en-US", nonce: "nonce123456" },
     },
     {
       action: "nodes-open",
-      customId: "st-presets:v1:nodes-open:en-US:42",
+      customId: "config:v2:st-presets-nodes-open:en-US:42",
       parsed: { action: "nodes-open", locale: "en-US", presetId: 42 },
     },
     {
       action: "nodes-range",
-      customId: "st-presets:v1:nodes-range:en-US:42:1",
+      customId: "config:v2:st-presets-nodes-range:en-US:42:1",
       parsed: { action: "nodes-range", locale: "en-US", presetId: 42, rangeIndex: 1 },
     },
     {
       action: "nodes-range-select",
-      customId: "st-presets:v1:nodes-range-select:en-US:42",
+      customId: "config:v2:st-presets-nodes-range-select:en-US:42",
       parsed: { action: "nodes-range-select", locale: "en-US", presetId: 42 },
     },
     {
       action: "nodes-page",
-      customId: "st-presets:v1:nodes-page:en-US:42:3",
+      customId: "config:v2:st-presets-nodes-page:en-US:42:3",
       parsed: { action: "nodes-page", locale: "en-US", presetId: 42, chooserPage: 3 },
     },
     {
       action: "nodes-submit",
-      customId: "st-presets:v1:nodes-submit:en-US:42:nonce123456",
+      customId: "config:v2:st-presets-nodes-submit:en-US:42:nonce123456",
       parsed: { action: "nodes-submit", locale: "en-US", presetId: 42, nonce: "nonce123456" },
     },
     {
       action: "delete-prompt",
-      customId: "st-presets:v1:delete-prompt:en-US:42",
+      customId: "config:v2:st-presets-delete-prompt:en-US:42",
       parsed: { action: "delete-prompt", locale: "en-US", presetId: 42 },
     },
     {
       action: "delete-cancel",
-      customId: "st-presets:v1:delete-cancel:en-US:42",
+      customId: "config:v2:st-presets-delete-cancel:en-US:42",
       parsed: { action: "delete-cancel", locale: "en-US", presetId: 42 },
     },
     {
       action: "delete-confirm",
-      customId: "st-presets:v1:delete-confirm:en-US:42",
+      customId: "config:v2:st-presets-delete-confirm:en-US:42",
       parsed: { action: "delete-confirm", locale: "en-US", presetId: 42 },
     },
   ];
@@ -132,24 +131,24 @@ describe("ST Presets route codec", () => {
       const namespace = parts[0] as string;
       const version = parts[1] as string;
       const segments = parts.slice(2);
-      const parsed = parseStPresetsPanelRoute({ namespace, version, segments });
+      const parsed = CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({ namespace, version, segments });
       expect(parsed).toEqual(c.parsed);
     }
   });
 
   it("encodes every typed route to exact literal wire bytes", () => {
     for (const c of WIRE_CONTRACT_V1) {
-      expect(buildStPresetsRouteId(c.parsed)).toBe(c.customId);
+      expect(CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.buildRouteId(c.parsed)).toBe(c.customId);
       const expectedSegments = c.customId.split(":").slice(2);
-      expect(buildStPresetsRouteSegments(c.parsed)).toEqual(expectedSegments);
+      expect(CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.buildRouteSegments(c.parsed)).toEqual(expectedSegments);
     }
   });
 
   it("round trips parse and build for all canonical actions", () => {
     for (const c of WIRE_CONTRACT_V1) {
-      const builtId = buildStPresetsRouteId(c.parsed);
+      const builtId = CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.buildRouteId(c.parsed);
       const parts = builtId.split(":");
-      const parsedFromBuilt = parseStPresetsPanelRoute({
+      const parsedFromBuilt = CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
         namespace: parts[0] as string,
         version: parts[1] as string,
         segments: parts.slice(2),
@@ -158,7 +157,7 @@ describe("ST Presets route codec", () => {
     }
   });
 
-  it("guarantees 15-action exhaustiveness across catalog, accepted actions, wire contract, and route handler comparisons", () => {
+  it("guarantees 15-action exhaustiveness across accepted actions, wire contract, and route handler comparisons", () => {
     const ACCEPTED_15_ACTIONS = [
       "add-open",
       "add-submit",
@@ -177,9 +176,7 @@ describe("ST Presets route codec", () => {
       "select",
     ].sort();
 
-    const catalogActions = listStPresetsPanelActions().sort();
     const wireActions = [...new Set(WIRE_CONTRACT_V1.map((c) => c.action))].sort();
-    const codecTableActions = Object.keys(ST_PRESETS_ROUTE_CODECS).sort();
 
     const routesSource = readFileSync(
       new URL("../../../src/utils/discord/interactions/stPresetsRoutes.ts", import.meta.url),
@@ -187,16 +184,12 @@ describe("ST Presets route codec", () => {
     );
     const handlerActions = new Set([...routesSource.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1]));
 
-    expect(catalogActions).toEqual(ACCEPTED_15_ACTIONS);
     expect(wireActions).toEqual(ACCEPTED_15_ACTIONS);
-    expect(codecTableActions).toEqual(ACCEPTED_15_ACTIONS);
 
     expect(handlerActions.size).toBe(15);
     expect([...handlerActions].sort()).toEqual(ACCEPTED_15_ACTIONS);
     expect(ACCEPTED_15_ACTIONS.filter((a) => !handlerActions.has(a))).toEqual([]);
     expect([...handlerActions].filter((a) => !ACCEPTED_15_ACTIONS.includes(a))).toEqual([]);
-    expect(codecTableActions.filter((a) => !handlerActions.has(a))).toEqual([]);
-    expect([...handlerActions].filter((a) => !codecTableActions.includes(a))).toEqual([]);
   });
 
   it("guarantees producer coverage against production UI and modal surfaces with five allowlisted producerless actions", () => {
@@ -228,10 +221,10 @@ describe("ST Presets route codec", () => {
       }
       if (!val || typeof val !== "object") return;
       const obj = val as Record<string, unknown>;
-      if (typeof obj.customId === "string" && obj.customId.startsWith("st-presets:")) {
+      if (typeof obj.customId === "string" && obj.customId.startsWith("config:v2:st-presets-")) {
         collectedCustomIds.push(obj.customId);
       }
-      if (typeof obj.custom_id === "string" && obj.custom_id.startsWith("st-presets:")) {
+      if (typeof obj.custom_id === "string" && obj.custom_id.startsWith("config:v2:st-presets-")) {
         collectedCustomIds.push(obj.custom_id);
       }
       for (const prop of Object.values(obj)) {
@@ -246,6 +239,7 @@ describe("ST Presets route codec", () => {
       activePresetId: null,
       readStatus: "stale",
       page: { kind: "none" },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     harvestCustomIds(nonePayload);
 
@@ -257,6 +251,7 @@ describe("ST Presets route codec", () => {
       readStatus: "fresh",
       page: { kind: "preset", presetId: 1 },
       rangeIndex: 1,
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     harvestCustomIds(multiPagePayload);
 
@@ -267,6 +262,7 @@ describe("ST Presets route codec", () => {
       activePresetId: 1,
       readStatus: "fresh",
       page: { kind: "preset", presetId: 1 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     harvestCustomIds(presetPayload);
 
@@ -277,6 +273,7 @@ describe("ST Presets route codec", () => {
       activePresetId: 1,
       readStatus: "fresh",
       page: { kind: "delete", presetId: 1 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     harvestCustomIds(deletePayload);
 
@@ -287,19 +284,27 @@ describe("ST Presets route codec", () => {
       activePresetId: 1,
       readStatus: "fresh",
       page: { kind: "preset", presetId: 1, nodeRangeIndex: 1, nodeRangeCount: 3 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     harvestCustomIds(nodePaginationPayload);
 
-    const addModal = buildAddStPresetModal("en-US", "nonce123456");
+    const addModal = buildAddStPresetModal("en-US", "nonce123456", CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER);
     harvestCustomIds(addModal);
 
-    const nodesModal = buildNodesToggleModal("en-US", makePreset(1), [makeNode(1)], 0, "nonce123456");
+    const nodesModal = buildNodesToggleModal(
+      "en-US",
+      makePreset(1),
+      [makeNode(1)],
+      0,
+      "nonce123456",
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
+    );
     harvestCustomIds(nodesModal);
 
     const producedActions = new Set<string>();
     for (const customId of collectedCustomIds) {
       const parts = customId.split(":");
-      const parsed = parseStPresetsPanelRoute({
+      const parsed = CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
         namespace: parts[0] as string,
         version: parts[1] as string,
         segments: parts.slice(2),
@@ -320,189 +325,289 @@ describe("ST Presets route codec", () => {
 
   it("rejects unsupported locales and invalid segment counts", () => {
     expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["select", "fr-FR"] }),
-    ).toBeNull();
-    expect(parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["select", ""] })).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["select", "en-US", "extra"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["retry", "en-US", "extra"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["none", "en-US", "extra"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["disable", "en-US", "extra"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["add-open", "en-US", "extra"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["range", "en-US"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["range", "en-US", "2", "extra"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["add-submit", "en-US"],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-select", "fr-FR"],
       }),
     ).toBeNull();
     expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["add-submit", "en-US", "nonce123456", "extra"],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-select", ""],
       }),
     ).toBeNull();
     expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["nodes-open", "en-US"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["nodes-open", "en-US", "42", "extra"],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-select", "en-US", "extra"],
       }),
     ).toBeNull();
     expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["nodes-range", "en-US", "42"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["nodes-range", "en-US", "42", "1", "extra"],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-retry", "en-US", "extra"],
       }),
     ).toBeNull();
     expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["nodes-page", "en-US", "42"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["nodes-page", "en-US", "42", "3", "extra"],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-none", "en-US", "extra"],
       }),
     ).toBeNull();
     expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["nodes-submit", "en-US", "42"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["nodes-submit", "en-US", "42", "nonce123456", "extra"],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-disable", "en-US", "extra"],
       }),
     ).toBeNull();
     expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["delete-prompt", "en-US"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["delete-prompt", "en-US", "42", "extra"],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-add-open", "en-US", "extra"],
       }),
     ).toBeNull();
     expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["delete-cancel", "en-US"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["delete-cancel", "en-US", "42", "extra"],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-range", "en-US"],
       }),
     ).toBeNull();
     expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["delete-confirm", "en-US"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["delete-confirm", "en-US", "42", "extra"],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-range", "en-US", "2", "extra"],
       }),
     ).toBeNull();
-    expect(parseStPresetsPanelRoute({ namespace: "wrong", version: "v1", segments: ["select", "en-US"] })).toBeNull();
     expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v2", segments: ["select", "en-US"] }),
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-add-submit", "en-US"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-add-submit", "en-US", "nonce123456", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-open", "en-US"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-open", "en-US", "42", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-range", "en-US", "42"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-range", "en-US", "42", "1", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-page", "en-US", "42"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-page", "en-US", "42", "3", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-submit", "en-US", "42"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-submit", "en-US", "42", "nonce123456", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-delete-prompt", "en-US"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-delete-prompt", "en-US", "42", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-delete-cancel", "en-US"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-delete-cancel", "en-US", "42", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-delete-confirm", "en-US"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-delete-confirm", "en-US", "42", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "wrong",
+        version: "v2",
+        segments: ["st-presets-select", "en-US"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v1",
+        segments: ["st-presets-select", "en-US"],
+      }),
     ).toBeNull();
   });
 
   it("rejects non-positive or non-safe integer IDs", () => {
     expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["nodes-open", "en-US", "0"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["nodes-open", "en-US", "-5"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["nodes-open", "en-US", "abc"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["nodes-open", "en-US", "1.5"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["nodes-range", "en-US", "42", "-1"],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-open", "en-US", "0"],
       }),
     ).toBeNull();
     expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["nodes-range", "en-US", "42", "1.5"],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-open", "en-US", "-5"],
       }),
     ).toBeNull();
     expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["nodes-page", "en-US", "42", "-1"],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-open", "en-US", "abc"],
       }),
     ).toBeNull();
     expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["range", "en-US", "-1"] }),
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-open", "en-US", "1.5"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-range", "en-US", "42", "-1"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-range", "en-US", "42", "1.5"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-page", "en-US", "42", "-1"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-range", "en-US", "-1"],
+      }),
     ).toBeNull();
   });
 
   it("rejects smuggled names or invalid nonces", () => {
     expect(
-      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["add-submit", "en-US", "short"] }),
-    ).toBeNull();
-    expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["add-submit", "en-US", "invalid nonce with spaces!"],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-add-submit", "en-US", "short"],
       }),
     ).toBeNull();
     expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["add-submit", "en-US", "a".repeat(33)],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-add-submit", "en-US", "invalid nonce with spaces!"],
       }),
     ).toBeNull();
     expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["nodes-submit", "en-US", "42", "bad!nonce#"],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-add-submit", "en-US", "a".repeat(33)],
       }),
     ).toBeNull();
     expect(
-      parseStPresetsPanelRoute({
-        namespace: "st-presets",
-        version: "v1",
-        segments: ["nodes-open", "en-US", "Preset Name"],
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-submit", "en-US", "42", "bad!nonce#"],
+      }),
+    ).toBeNull();
+    expect(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.parseRoute({
+        namespace: "config",
+        version: "v2",
+        segments: ["st-presets-nodes-open", "en-US", "Preset Name"],
       }),
     ).toBeNull();
   });
@@ -531,7 +636,7 @@ describe("ST Presets route codec", () => {
     ];
 
     for (const route of maxRoutes) {
-      const customId = buildStPresetsRouteId(route);
+      const customId = CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.buildRouteId(route);
       expect(customId.length).toBeLessThanOrEqual(100);
     }
   });
@@ -547,6 +652,7 @@ describe("ST Presets panel rendering", () => {
       activePresetId: 1,
       readStatus: "fresh",
       page: { kind: "preset", presetId: 1 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
 
     const serialized = JSON.stringify(payload);
@@ -576,9 +682,10 @@ describe("ST Presets panel rendering", () => {
       activePresetId: 1,
       readStatus: "fresh",
       page: { kind: "preset", presetId: 1 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const serialized23 = JSON.stringify(payload23);
-    expect(serialized23).not.toContain("st-presets:v1:range");
+    expect(serialized23).not.toContain("config:v2:st-presets-range");
 
     // 24 presets: 2 pages, range controls present
     const presets24 = Array.from({ length: 24 }, (_, i) => makePreset(i + 1));
@@ -590,9 +697,10 @@ describe("ST Presets panel rendering", () => {
       readStatus: "fresh",
       page: { kind: "preset", presetId: 1 },
       rangeIndex: 0,
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const serialized24 = JSON.stringify(payload24);
-    expect(serialized24).toContain("st-presets:v1:range:en-US:1");
+    expect(serialized24).toContain("config:v2:st-presets-range:en-US:1");
     expect(serialized24).toContain('"disabled":true'); // Previous disabled at page 0
 
     const getPaginationButtons = (payload: ReturnType<typeof buildStPresetsPanelPayload>) => {
@@ -612,8 +720,8 @@ describe("ST Presets panel rendering", () => {
     const firstPageButtons = getPaginationButtons(payload24);
     expect(firstPageButtons.map((button) => button.label)).toEqual(["← Previous", "Page 1 of 2", "Next →"]);
     expect(firstPageButtons.map((button) => button.disabled)).toEqual([true, true, false]);
-    expect(firstPageButtons[0]?.customId).toBe("st-presets:v1:range:en-US:0");
-    expect(firstPageButtons[2]?.customId).toBe("st-presets:v1:range:en-US:1");
+    expect(firstPageButtons[0]?.customId).toBe("config:v2:st-presets-range:en-US:0");
+    expect(firstPageButtons[2]?.customId).toBe("config:v2:st-presets-range:en-US:1");
     expect(new Set(firstPageButtons.map((button) => button.customId)).size).toBe(3);
 
     const secondPage = buildStPresetsPanelPayload({
@@ -624,6 +732,7 @@ describe("ST Presets panel rendering", () => {
       readStatus: "fresh",
       page: { kind: "preset", presetId: 1 },
       rangeIndex: 1,
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const secondPageButtons = getPaginationButtons(secondPage);
     expect(secondPageButtons.map((button) => button.label)).toEqual(["← Previous", "Page 2 of 2", "Next →"]);
@@ -637,6 +746,7 @@ describe("ST Presets panel rendering", () => {
       readStatus: "stale",
       page: { kind: "preset", presetId: 1 },
       rangeIndex: 1,
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     expect(getPaginationButtons(stalePage).map((button) => button.disabled)).toEqual([true, true, true]);
   });
@@ -650,14 +760,15 @@ describe("ST Presets panel rendering", () => {
       activePresetId: 1,
       readStatus: "stale",
       page: { kind: "preset", presetId: 1 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const serializedStale = JSON.stringify(stalePayload);
     expect(serializedStale).toContain(
-      '"type":3,"customId":"st-presets:v1:select:en-US","placeholder":"Choose a preset or action...","options":[',
+      '"type":3,"customId":"config:v2:st-presets-select:en-US","placeholder":"Choose a preset or action...","options":[',
     );
     expect(serializedStale).toContain('"disabled":true');
     expect(serializedStale).toContain("Saved data may be out of date");
-    expect(serializedStale).toContain('"customId":"st-presets:v1:retry:en-US","label":"Retry"');
+    expect(serializedStale).toContain('"customId":"config:v2:st-presets-retry:en-US","label":"Retry"');
 
     const unavailablePayload = buildStPresetsPanelPayload({
       locale: "en-US",
@@ -666,10 +777,11 @@ describe("ST Presets panel rendering", () => {
       activePresetId: null,
       readStatus: "unavailable",
       page: { kind: "none" },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const serializedUnavailable = JSON.stringify(unavailablePayload);
     expect(serializedUnavailable).toContain("Preset data could not be loaded. Retry to try again.");
-    expect(serializedUnavailable).toContain('"customId":"st-presets:v1:retry:en-US","label":"Retry"');
+    expect(serializedUnavailable).toContain('"customId":"config:v2:st-presets-retry:en-US","label":"Retry"');
   });
 
   it("renders None page in a single state with no action button regardless of active preset", () => {
@@ -681,12 +793,13 @@ describe("ST Presets panel rendering", () => {
       activePresetId: null,
       readStatus: "fresh",
       page: { kind: "none" },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const serializedNoActive = JSON.stringify(noActivePayload);
     expect(serializedNoActive).toContain("No Active Preset");
     expect(serializedNoActive).toContain("Chat completion presets are currently disabled");
     expect(serializedNoActive).not.toContain("Disable Presets");
-    expect(serializedNoActive).not.toContain("st-presets:v1:disable");
+    expect(serializedNoActive).not.toContain("config:v2:st-presets-disable");
 
     // State 2: Active preset exists (still renders single state, no button)
     const activePayload = buildStPresetsPanelPayload({
@@ -696,12 +809,13 @@ describe("ST Presets panel rendering", () => {
       activePresetId: 1,
       readStatus: "fresh",
       page: { kind: "none" },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const serializedActive = JSON.stringify(activePayload);
     expect(serializedActive).toContain("No Active Preset");
     expect(serializedActive).toContain("Chat completion presets are currently disabled");
     expect(serializedActive).not.toContain("Disable Presets");
-    expect(serializedActive).not.toContain("st-presets:v1:disable");
+    expect(serializedActive).not.toContain("config:v2:st-presets-disable");
   });
 
   it("derives exactly one default option across selector states to prevent Discord payload crash", () => {
@@ -728,6 +842,7 @@ describe("ST Presets panel rendering", () => {
       activePresetId: 1,
       readStatus: "fresh",
       page: { kind: "none" },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const defaultsNoneActive = getSelectOptions(noneWithActive).filter((o) => o.default);
     expect(defaultsNoneActive).toHaveLength(1);
@@ -741,6 +856,7 @@ describe("ST Presets panel rendering", () => {
       activePresetId: null,
       readStatus: "fresh",
       page: { kind: "none" },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const defaultsNoneNoActive = getSelectOptions(noneNoActive).filter((o) => o.default);
     expect(defaultsNoneNoActive).toHaveLength(1);
@@ -754,6 +870,7 @@ describe("ST Presets panel rendering", () => {
       activePresetId: 1,
       readStatus: "fresh",
       page: { kind: "preset", presetId: 2 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const defaultsPreset = getSelectOptions(presetPage).filter((o) => o.default);
     expect(defaultsPreset).toHaveLength(1);
@@ -768,6 +885,7 @@ describe("ST Presets panel rendering", () => {
       readStatus: "fresh",
       page: { kind: "preset", presetId: 24 },
       rangeIndex: 0,
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const defaultsOffRange = getSelectOptions(presetOffRange).filter((o) => o.default);
     expect(defaultsOffRange).toHaveLength(0);
@@ -783,6 +901,7 @@ describe("ST Presets panel rendering", () => {
       activeNodeCounts: { total: 54, enabled: 47 },
       readStatus: "fresh",
       page: { kind: "preset", presetId: 1 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const serializedActive = JSON.stringify(activePayload);
     expect(serializedActive).not.toContain("### My Preset");
@@ -801,6 +920,7 @@ describe("ST Presets panel rendering", () => {
       activeNodeCounts: { total: 54, enabled: 47 },
       readStatus: "fresh",
       page: { kind: "preset", presetId: 1 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const serializedNonActive = JSON.stringify(nonActivePayload);
     expect(serializedNonActive).not.toContain("### First Preset");
@@ -816,6 +936,7 @@ describe("ST Presets panel rendering", () => {
       activeNodeCounts: null,
       readStatus: "fresh",
       page: { kind: "preset", presetId: 1 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const serializedNoCounts = JSON.stringify(noCountsPayload);
     expect(serializedNoCounts).not.toContain("### Preset 1");
@@ -831,6 +952,7 @@ describe("ST Presets panel rendering", () => {
       activePresetId: 1,
       readStatus: "fresh",
       page: { kind: "preset", presetId: 1 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const serializedWithDesc = JSON.stringify(withDesc);
     expect(serializedWithDesc).toContain("> An author");
@@ -842,6 +964,7 @@ describe("ST Presets panel rendering", () => {
       activePresetId: 1,
       readStatus: "fresh",
       page: { kind: "preset", presetId: 1 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const serializedWithoutDesc = JSON.stringify(withoutDesc);
     expect(serializedWithoutDesc).not.toContain("> ");
@@ -855,11 +978,12 @@ describe("ST Presets panel rendering", () => {
       activePresetId: 1,
       readStatus: "fresh",
       page: { kind: "delete", presetId: 1 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const serialized = JSON.stringify(payload);
     expect(serialized).toContain("Delete **My Special Preset**?");
-    expect(serialized).toContain("st-presets:v1:delete-confirm:en-US:1");
-    expect(serialized).toContain("st-presets:v1:delete-cancel:en-US:1");
+    expect(serialized).toContain("config:v2:st-presets-delete-confirm:en-US:1");
+    expect(serialized).toContain("config:v2:st-presets-delete-cancel:en-US:1");
   });
 
   it("keeps the active preset body while exposing oversized node modal pages", () => {
@@ -870,11 +994,12 @@ describe("ST Presets panel rendering", () => {
       activePresetId: 1,
       readStatus: "fresh",
       page: { kind: "preset", presetId: 1, nodeRangeIndex: 0, nodeRangeCount: 3 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const serialized = JSON.stringify(payload);
     expect(serialized).not.toContain("Select Page");
     expect(serialized).toContain("Currently active preset");
-    expect(serialized).toContain("st-presets:v1:nodes-range-select:en-US:1");
+    expect(serialized).toContain("config:v2:st-presets-nodes-range-select:en-US:1");
     // Every range including the first is its own option, so no slice is stranded behind a
     // disabled control.
     expect(serialized).toContain('"value":"0","label":"Nodes 1-50"');
@@ -893,6 +1018,7 @@ describe("ST Presets panel rendering", () => {
       activePresetId: 24,
       readStatus: "fresh",
       page: { kind: "preset", presetId: 24 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const serialized = JSON.stringify(payload);
     expect(serialized).toContain('"label":"Page 2 of 2"');
@@ -909,6 +1035,7 @@ describe("ST Presets panel rendering", () => {
       activePresetId: 1,
       readStatus: "fresh",
       page: { kind: "delete", presetId: 24 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     expect(JSON.stringify(payload)).toContain('"label":"Page 2 of 2"');
   });
@@ -923,6 +1050,7 @@ describe("ST Presets panel rendering", () => {
       readStatus: "fresh",
       page: { kind: "preset", presetId: 24 },
       rangeIndex: 0,
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     expect(JSON.stringify(payload)).toContain('"label":"Page 1 of 2"');
   });
@@ -935,6 +1063,7 @@ describe("ST Presets panel rendering", () => {
       activePresetId: 1,
       readStatus: "fresh",
       page: { kind: "preset", presetId: 1, nodeRangeIndex: 0, nodeRangeCount: 2, nodeTotalCount: 51 },
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
     const serialized = JSON.stringify(payload);
     expect(serialized).toContain('"value":"0","label":"Nodes 1-50"');
@@ -957,6 +1086,7 @@ describe("ST Presets panel rendering", () => {
       page: { kind: "preset", presetId: 1 },
       rangeIndex: 0,
       receipt: receipt("warning"),
+      routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     });
 
     const result = validateComponentsV2MessageLimits(payload);
@@ -969,8 +1099,8 @@ describe("ST Presets panel rendering", () => {
 
 describe("Modal builders and raw modal transport", () => {
   it("builds the Add Preset modal with file upload and text inputs", () => {
-    const modal = buildAddStPresetModal("en-US", "nonce123");
-    expect(modal.custom_id).toBe("st-presets:v1:add-submit:en-US:nonce123");
+    const modal = buildAddStPresetModal("en-US", "nonce123", CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER);
+    expect(modal.custom_id).toBe("config:v2:st-presets-add-submit:en-US:nonce123");
     expect(modal.title).toBe("Add New Preset");
     expect(modal.components).toHaveLength(3);
 
@@ -986,9 +1116,9 @@ describe("Modal builders and raw modal transport", () => {
   it("builds the Node Toggle modal chunked into groups of 10", () => {
     const nodes = Array.from({ length: 25 }, (_, i) => makeNode(i + 1));
     const preset = makePreset(1, { preset_name: "Preset Celia" });
-    const modal = buildNodesToggleModal("en-US", preset, nodes, 0, "nonce456");
+    const modal = buildNodesToggleModal("en-US", preset, nodes, 0, "nonce456", CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER);
 
-    expect(modal.custom_id).toBe("st-presets:v1:nodes-submit:en-US:1:nonce456");
+    expect(modal.custom_id).toBe("config:v2:st-presets-nodes-submit:en-US:1:nonce456");
     expect(modal.title).toBe("Preset Celia");
     expect(modal.components).toHaveLength(3); // 10 + 10 + 5 = 3 groups
 

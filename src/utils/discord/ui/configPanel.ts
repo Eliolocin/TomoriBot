@@ -174,7 +174,7 @@ const ADDRESSING_STYLES: readonly AddressingStyle[] = ["masculine", "feminine", 
  * Persona and a Behavior page), and `check-locales` only sees dot-notation string literals, so a
  * composed key would resolve to raw text with every gate green.
  */
-const PAGE_LOCALE_KEYS: Record<ConfigCategory, Record<string, string>> = {
+export const PAGE_LOCALE_KEYS: Record<ConfigCategory, Record<string, string>> = {
   persona: {
     general: "commands.config.panel.page_persona_general",
     triggers: "commands.config.panel.page_persona_triggers",
@@ -215,7 +215,7 @@ const PAGE_LOCALE_KEYS: Record<ConfigCategory, Record<string, string>> = {
   },
 };
 
-const CATEGORY_LOCALE_KEYS: Record<ConfigCategory, string> = {
+export const CATEGORY_LOCALE_KEYS: Record<ConfigCategory, string> = {
   persona: "commands.config.panel.category_persona",
   behavior: "commands.config.panel.category_behavior",
   channels: "commands.config.panel.category_channels",

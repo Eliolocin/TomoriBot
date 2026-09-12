@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { ComponentType } from "discord.js";
 import type { StPresetRow } from "@/types/db/schema";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
+import { CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER } from "@/utils/discord/configPanelCatalog";
 import { MAX_NODES_PER_MODAL_PAGE, NODE_RANGE_OPTIONS_PER_PAGE } from "@/utils/discord/stPresetsPanelCatalog";
 import { MAX_PRESET_NAME_LENGTH } from "@/utils/stPreset/stPresetImportParser";
 import { buildStPresetsPanelPayload, MAX_PRESETS_PER_SELECTOR_PAGE } from "@/utils/discord/ui/stPresetsPanel";
@@ -131,6 +132,7 @@ describe("SillyTavern presets panel Components V2 limits", () => {
                     page,
                     rangeIndex: 2,
                     receipt,
+                    routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
                   }),
                   `${locale}/${scope}/${readStatus}/size-${size}/${page.kind}`,
                 );
@@ -163,6 +165,7 @@ describe("SillyTavern presets panel Components V2 limits", () => {
             activeNodeCounts: { total: nodeTotalCount, enabled: Math.floor(nodeTotalCount / 2) },
             readStatus: "fresh",
             page: { kind: "preset", presetId: 1, nodeRangeIndex, nodeRangeCount, nodeTotalCount },
+            routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
           }),
           `nodes-${nodeTotalCount}/${nodeRangeIndex}`,
         );
@@ -195,6 +198,7 @@ describe("SillyTavern presets panel Components V2 limits", () => {
             readStatus: "fresh",
             page,
             receipt: REALISTIC_RECEIPT,
+            routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
           }),
           `shape-${index}/${page.kind}`,
         );
@@ -223,6 +227,7 @@ describe("SillyTavern presets panel Components V2 limits", () => {
               readStatus: "fresh",
               page,
               receipt,
+              routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
             }),
             `full-page-oversized/${locale}/${page.kind}/receipt=${Boolean(receipt)}`,
           );
@@ -247,6 +252,7 @@ describe("SillyTavern presets panel Components V2 limits", () => {
             readStatus: "fresh",
             page: { kind: "none" },
             rangeIndex,
+            routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
           }),
         ),
       );

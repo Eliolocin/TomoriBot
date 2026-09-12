@@ -18,7 +18,6 @@ import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import {
   MAX_NODES_PER_MODAL_PAGE,
   NODE_RANGE_OPTIONS_PER_PAGE,
-  ST_PRESETS_PANEL_ROUTE_ADAPTER,
   type StPresetsPanelRouteAdapter,
 } from "@/utils/discord/stPresetsPanelCatalog";
 import {
@@ -69,7 +68,7 @@ export interface StPresetsPanelRenderInput {
   page: StPresetsPanelPage;
   rangeIndex?: number;
   receipt?: PanelReceipt;
-  routes?: StPresetsPanelRouteAdapter;
+  routes: StPresetsPanelRouteAdapter;
   headingLevel?: 2 | 3;
 }
 
@@ -132,7 +131,7 @@ function buildPayload(components: ComponentInContainerData[], receipt?: PanelRec
 
 export function buildStPresetsPanelComponents(input: StPresetsPanelRenderInput): ComponentInContainerData[] {
   const { locale, presets, activePresetId, readStatus, page } = input;
-  const routes = input.routes ?? ST_PRESETS_PANEL_ROUTE_ADAPTER;
+  const routes = input.routes;
   const writesDisabled = readStatus !== "fresh";
 
   const components: ComponentInContainerData[] = [
@@ -410,7 +409,7 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
 export function buildAddStPresetModal(
   locale: string,
   nonce: string,
-  routes: StPresetsPanelRouteAdapter = ST_PRESETS_PANEL_ROUTE_ADAPTER,
+  routes: StPresetsPanelRouteAdapter,
 ): {
   custom_id: string;
   title: string;
@@ -466,7 +465,7 @@ export function buildNodesToggleModal(
   pageNodes: StPresetNodeRow[],
   pageOffset: number,
   nonce: string,
-  routes: StPresetsPanelRouteAdapter = ST_PRESETS_PANEL_ROUTE_ADAPTER,
+  routes: StPresetsPanelRouteAdapter,
 ): {
   custom_id: string;
   title: string;

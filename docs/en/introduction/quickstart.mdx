@@ -55,9 +55,22 @@ see [Providers & Models](/features/setup-administration/providers-and-models/#ap
 
 ### Step 3: Run Setup
 
-Run `/setup` and paste in your API key. This encrypts the key, initializes her
-configuration for the server, and gets her ready to talk. Each server keeps its own
-independent configuration.
+Run `/setup`. It opens a private checklist panel that only you can operate. Work through its items,
+then press **Finish Setup**:
+
+- **AI Provider**: choose **AI Provider (Recommended)**, pick your provider, and paste the key in.
+  Advanced self-hosters can pick **Custom Endpoint (Advanced)** and register their endpoint's
+  connection and text model here instead, and a server can run with **User BYOK** (in a server, not a
+  DM) so every member supplies their own personal provider.
+- **Starting Settings**: pick a starting persona, a reply style, a timezone, and the default system
+  prompt.
+- **Policies** (hosted instances only): accept the Terms of Service and the Privacy Policy in one
+  modal.
+
+Nothing is saved while you work: the panel is a draft, **Finish Setup** is what encrypts the key,
+initializes her configuration for the server, and gets her ready to talk. **Cancel** discards the
+draft, and an untouched panel expires on its own. Each server keeps its own independent
+configuration.
 
 **Recommended:** run `/expressions initialize` afterward so she can use your
 server's custom emojis and stickers accurately.
@@ -75,8 +88,11 @@ From here you can shape how she gets triggered and how she behaves:
 - Teach her with `/memories`: see [Memory](/features/knowledge/memory/).
 - Explore other customization options: see [Command Reference](/features/command-reference/) or [Features](/features/)
 
-Setting up TomoriBot means you and your server members agree to her `/legal terms-of-service` and
-`/legal privacy-policy` notices.
+On the hosted instance, setting up TomoriBot means you and your server members agree to her
+`/legal terms-of-service` and `/legal privacy-policy` notices; the guided setup asks you to accept
+both. Those two commands, and the Policies step that carries them, belong to the hosted deployment.
+A self-hosted instance registers `/legal license` in every environment and the policy two only under
+`RUN_ENV=production`.
 
 ## Self-hosting
 

@@ -12,7 +12,7 @@ import type { GuildMcpServerRow } from "@/types/db/schema";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
-import { MCPS_PANEL_ROUTE_ADAPTER, type McpsPanelRouteAdapter } from "@/utils/discord/mcpsPanelCatalog";
+import type { McpsPanelRouteAdapter } from "@/utils/discord/mcpsPanelCatalog";
 import {
   buildPaginationRow,
   buildPanelContainer,
@@ -54,7 +54,7 @@ export interface McpsPanelRenderInput {
   page: McpsPanelPage;
   receipt?: PanelReceipt;
   pageSize?: number;
-  routes?: McpsPanelRouteAdapter;
+  routes: McpsPanelRouteAdapter;
   headingLevel?: 2 | 3;
 }
 
@@ -161,7 +161,7 @@ function buildAddArea(
 }
 
 export function buildMcpsPanelComponents(input: McpsPanelRenderInput): ComponentInContainerData[] {
-  const routes = input.routes ?? MCPS_PANEL_ROUTE_ADAPTER;
+  const routes = input.routes;
   const pageSize = input.pageSize ?? MAX_MCP_PANEL_PAGE_SIZE;
   const configs = sortMcpConfigs(input.configs);
   const writesDisabled = input.readStatus !== "fresh";
@@ -360,7 +360,7 @@ function textInput(
 export function buildAddMcpModal(
   locale: string,
   nonce: string,
-  routes: McpsPanelRouteAdapter = MCPS_PANEL_ROUTE_ADAPTER,
+  routes: McpsPanelRouteAdapter,
 ): {
   custom_id: string;
   title: string;

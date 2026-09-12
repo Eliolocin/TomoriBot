@@ -5,6 +5,7 @@ import { ComponentType } from "discord.js";
 import type { GuildMcpServerRow } from "@/types/db/schema";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import { buildMcpsPanelPayload, MAX_MCP_PANEL_PAGE_SIZE } from "@/utils/discord/ui/mcpsPanel";
+import { CONFIG_MCP_PANEL_ROUTE_ADAPTER } from "@/utils/discord/configPanelCatalog";
 import { validateComponentsV2MessageLimits } from "@/utils/discord/ui/componentsV2Limits";
 import { initializeLocalizer } from "@/utils/text/localizer";
 
@@ -112,7 +113,15 @@ describe("MCP panel Components V2 limits", () => {
                 { kind: "remove" as const, entityId: configs[0]?.guild_mcp_id ?? 1 },
               ]) {
                 assertSafePayload(
-                  buildMcpsPanelPayload({ locale, scope, configs, readStatus, page, receipt }),
+                  buildMcpsPanelPayload({
+                    locale,
+                    scope,
+                    configs,
+                    readStatus,
+                    page,
+                    receipt,
+                    routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
+                  }),
                   `${locale}/${scope}/${readStatus}/size-${size}/${page.kind}`,
                 );
               }
@@ -150,6 +159,7 @@ describe("MCP panel Components V2 limits", () => {
             readStatus: "fresh",
             page,
             receipt: REALISTIC_RECEIPT,
+            routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
           }),
           `shape-${index}/${page.kind}`,
         );
@@ -177,6 +187,7 @@ describe("MCP panel Components V2 limits", () => {
               readStatus: "fresh",
               page,
               receipt,
+              routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
             }),
             `full-page-oversized/${locale}/${page.kind}/receipt=${Boolean(receipt)}`,
           );
@@ -199,14 +210,15 @@ describe("MCP panel Components V2 limits", () => {
             configs,
             readStatus: "fresh",
             page: { kind: "collection", rangeIndex },
+            routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
           }),
-        ).filter((id) => id.includes("mcps:v1:remove-prompt:")),
+        ).filter((id) => id.includes("config:v2:mcp-remove-prompt:")),
       );
     }
     expect(seen).toHaveLength(total);
     expect(new Set(seen).size).toBe(total);
     expect(seen.sort()).toEqual(
-      Array.from({ length: total }, (_, index) => `mcps:v1:remove-prompt:en-US:${index + 1}`).sort(),
+      Array.from({ length: total }, (_, index) => `config:v2:mcp-remove-prompt:en-US:${index + 1}`).sort(),
     );
   });
 });

@@ -53,6 +53,7 @@ function makeDependencies(
   const snapshots = new Map<string, { presetId: number; identifiers: string[] }>();
 
   return {
+    routeAdapter: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
     resolveScope: async (_interaction, forceRefresh) => {
       calls.push(forceRefresh ? "resolveScope-fresh" : "resolveScope");
       return {
@@ -236,23 +237,23 @@ describe("ST Presets interaction routes", () => {
     const calls: string[] = [];
     const route = createStPresetsInteractionRoute(makeDependencies(calls));
 
-    const buttonInteraction = makeButtonInteraction("st-presets:v1:add-open:en-US", calls);
+    const buttonInteraction = makeButtonInteraction("config:v2:st-presets-add-open:en-US", calls);
 
     await route.execute({} as Client, buttonInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["add-open", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-add-open", "en-US"],
     });
 
     expect(calls).toEqual(["showAddModal"]);
 
     calls.length = 0;
-    const selectInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["add"], calls);
+    const selectInteraction = makeSelectInteraction("config:v2:st-presets-select:en-US", ["add"], calls);
 
     await route.execute({} as Client, selectInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["select", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-select", "en-US"],
     });
 
     expect(calls).toEqual(["showAddModal"]);
@@ -337,7 +338,7 @@ describe("ST Presets interaction routes", () => {
     let editReplyPayload: unknown = null;
     const route = createStPresetsInteractionRoute(makeDependencies(calls));
 
-    const selectNoneInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["none"], calls, {
+    const selectNoneInteraction = makeSelectInteraction("config:v2:st-presets-select:en-US", ["none"], calls, {
       editReply: async (opts: unknown) => {
         calls.push("editReply");
         editReplyPayload = opts;
@@ -345,9 +346,9 @@ describe("ST Presets interaction routes", () => {
     });
 
     await route.execute({} as Client, selectNoneInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["select", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-select", "en-US"],
     });
 
     expect(calls).toEqual(["deferUpdate", "resolveScope", "deactivateAll", "resolveScope-fresh", "editReply"]);
@@ -378,7 +379,7 @@ describe("ST Presets interaction routes", () => {
       }),
     );
 
-    const selectNoneInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["none"], calls, {
+    const selectNoneInteraction = makeSelectInteraction("config:v2:st-presets-select:en-US", ["none"], calls, {
       editReply: async (opts: unknown) => {
         calls.push("editReply");
         editReplyPayload = opts;
@@ -386,9 +387,9 @@ describe("ST Presets interaction routes", () => {
     });
 
     await route.execute({} as Client, selectNoneInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["select", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-select", "en-US"],
     });
 
     expect(calls).toEqual(["deferUpdate", "resolveScope", "editReply"]);
@@ -419,12 +420,12 @@ describe("ST Presets interaction routes", () => {
       }),
     );
 
-    const selectNoneInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["none"], calls);
+    const selectNoneInteraction = makeSelectInteraction("config:v2:st-presets-select:en-US", ["none"], calls);
 
     await route.execute({} as Client, selectNoneInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["select", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-select", "en-US"],
     });
 
     expect(calls).toEqual(["deferUpdate", "resolveScope-stale", "editReply"]);
@@ -437,7 +438,7 @@ describe("ST Presets interaction routes", () => {
     const route = createStPresetsInteractionRoute(makeDependencies(calls));
 
     // Legacy disable button
-    const disableInteraction = makeButtonInteraction("st-presets:v1:disable:en-US", calls, {
+    const disableInteraction = makeButtonInteraction("config:v2:st-presets-disable:en-US", calls, {
       editReply: async (opts: unknown) => {
         calls.push("editReply");
         editReplyPayload = opts;
@@ -445,9 +446,9 @@ describe("ST Presets interaction routes", () => {
     });
 
     await route.execute({} as Client, disableInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["disable", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-disable", "en-US"],
     });
 
     expect(calls).toEqual(["deferUpdate", "resolveScope", "deactivateAll", "resolveScope-fresh", "editReply"]);
@@ -456,7 +457,7 @@ describe("ST Presets interaction routes", () => {
     // Legacy none route action
     calls.length = 0;
     editReplyPayload = null;
-    const noneInteraction = makeButtonInteraction("st-presets:v1:none:en-US", calls, {
+    const noneInteraction = makeButtonInteraction("config:v2:st-presets-none:en-US", calls, {
       editReply: async (opts: unknown) => {
         calls.push("editReply");
         editReplyPayload = opts;
@@ -464,9 +465,9 @@ describe("ST Presets interaction routes", () => {
     });
 
     await route.execute({} as Client, noneInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["none", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-none", "en-US"],
     });
 
     expect(calls).toEqual(["deferUpdate", "resolveScope", "editReply"]);
@@ -496,7 +497,7 @@ describe("ST Presets interaction routes", () => {
         },
       }),
     );
-    const interaction = makeButtonInteraction("st-presets:v1:range:en-US:1", calls, {
+    const interaction = makeButtonInteraction("config:v2:st-presets-range:en-US:1", calls, {
       editReply: async (payload: unknown) => {
         calls.push("editReply");
         editReplyPayload = payload;
@@ -504,16 +505,16 @@ describe("ST Presets interaction routes", () => {
     });
 
     await route.execute({} as Client, interaction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["range", "en-US", "1"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-range", "en-US", "1"],
     });
 
     expect(calls).toEqual(["deferUpdate", "resolveScope", "editReply"]);
     const rendered = JSON.stringify(editReplyPayload);
     expect(rendered).toContain('"label":"Page 2 of 2"');
-    expect(rendered).toContain("st-presets:v1:range:en-US:0");
-    expect(rendered).toContain("st-presets:v1:range:en-US:1");
+    expect(rendered).toContain("config:v2:st-presets-range:en-US:0");
+    expect(rendered).toContain("config:v2:st-presets-range:en-US:1");
     expect(rendered).toContain("> Description 1");
     expect(rendered).not.toContain("> Description 24");
   });
@@ -524,7 +525,7 @@ describe("ST Presets interaction routes", () => {
 
     // Case 1: Preset 99 selected (not found), but Preset 1 is active -> lands on Preset 1 page with changed receipt
     const route = createStPresetsInteractionRoute(makeDependencies(calls));
-    const selectMissingInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["99"], calls, {
+    const selectMissingInteraction = makeSelectInteraction("config:v2:st-presets-select:en-US", ["99"], calls, {
       editReply: async (opts: unknown) => {
         calls.push("editReply");
         editReplyPayload = opts;
@@ -532,9 +533,9 @@ describe("ST Presets interaction routes", () => {
     });
 
     await route.execute({} as Client, selectMissingInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["select", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-select", "en-US"],
     });
 
     expect(calls).toEqual(["deferUpdate", "resolveScope", "editReply"]);
@@ -565,7 +566,7 @@ describe("ST Presets interaction routes", () => {
       }),
     );
 
-    const selectMissingNoActive = makeSelectInteraction("st-presets:v1:select:en-US", ["99"], calls, {
+    const selectMissingNoActive = makeSelectInteraction("config:v2:st-presets-select:en-US", ["99"], calls, {
       editReply: async (opts: unknown) => {
         calls.push("editReply");
         editReplyPayload = opts;
@@ -573,9 +574,9 @@ describe("ST Presets interaction routes", () => {
     });
 
     await routeNoActive.execute({} as Client, selectMissingNoActive, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["select", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-select", "en-US"],
     });
 
     expect(calls).toEqual(["deferUpdate", "resolveScope", "editReply"]);
@@ -588,12 +589,12 @@ describe("ST Presets interaction routes", () => {
     const calls: string[] = [];
     const route = createStPresetsInteractionRoute(makeDependencies(calls));
 
-    const selectInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["2"], calls);
+    const selectInteraction = makeSelectInteraction("config:v2:st-presets-select:en-US", ["2"], calls);
 
     await route.execute({} as Client, selectInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["select", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-select", "en-US"],
     });
 
     expect(calls).toEqual(["deferUpdate", "resolveScope", "activate:2", "resolveScope-fresh", "editReply"]);
@@ -603,12 +604,16 @@ describe("ST Presets interaction routes", () => {
     const calls: string[] = [];
     const route = createStPresetsInteractionRoute(makeDependencies(calls));
 
-    const modalInteraction = makeModalInteraction("modal-1", "st-presets:v1:add-submit:en-US:fixed-nonce-123", calls);
+    const modalInteraction = makeModalInteraction(
+      "modal-1",
+      "config:v2:st-presets-add-submit:en-US:fixed-nonce-123",
+      calls,
+    );
 
     await route.execute({} as Client, modalInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["add-submit", "en-US", "fixed-nonce-123"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-add-submit", "en-US", "fixed-nonce-123"],
     });
 
     expect(calls).toEqual([
@@ -625,12 +630,12 @@ describe("ST Presets interaction routes", () => {
     const calls: string[] = [];
     const route = createStPresetsInteractionRoute(makeDependencies(calls));
 
-    const buttonInteraction = makeButtonInteraction("st-presets:v1:nodes-open:en-US:1", calls);
+    const buttonInteraction = makeButtonInteraction("config:v2:st-presets-nodes-open:en-US:1", calls);
 
     await route.execute({} as Client, buttonInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["nodes-open", "en-US", "1"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-nodes-open", "en-US", "1"],
     });
 
     expect(calls).toEqual([
@@ -654,7 +659,7 @@ describe("ST Presets interaction routes", () => {
       }),
     );
 
-    const buttonInteraction = makeButtonInteraction("st-presets:v1:nodes-open:en-US:1", calls, {
+    const buttonInteraction = makeButtonInteraction("config:v2:st-presets-nodes-open:en-US:1", calls, {
       editReply: async (payload: unknown) => {
         calls.push("editReply");
         editReplyPayload = payload;
@@ -662,15 +667,15 @@ describe("ST Presets interaction routes", () => {
     });
 
     await route.execute({} as Client, buttonInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["nodes-open", "en-US", "1"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-nodes-open", "en-US", "1"],
     });
 
     expect(calls).toEqual(["resolveScope", "loadToggleableNodes:1", "deferUpdate", "editReply"]);
     const rendered = JSON.stringify(editReplyPayload);
     expect(rendered).toContain("Currently active preset");
-    expect(rendered).toContain("st-presets:v1:nodes-range-select:en-US:1");
+    expect(rendered).toContain("config:v2:st-presets-nodes-range-select:en-US:1");
     expect(rendered).toContain('"value":"0","label":"Nodes 1-50"');
     expect(rendered).toContain('"value":"1","label":"Nodes 51-60"');
     expect(rendered).not.toContain("Select Page");
@@ -688,7 +693,7 @@ describe("ST Presets interaction routes", () => {
         },
       }),
     );
-    const customId = "st-presets:v1:nodes-page:en-US:1:2";
+    const customId = "config:v2:st-presets-nodes-page:en-US:1:2";
     const buttonInteraction = makeButtonInteraction(customId, calls, {
       editReply: async (payload: unknown) => {
         calls.push("editReply");
@@ -697,9 +702,9 @@ describe("ST Presets interaction routes", () => {
     });
 
     await route.execute({} as Client, buttonInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["nodes-page", "en-US", "1", "2"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-nodes-page", "en-US", "1", "2"],
     });
 
     expect(calls).toEqual(["deferUpdate", "resolveScope", "loadToggleableNodes:1", "editReply"]);
@@ -728,12 +733,12 @@ describe("ST Presets interaction routes", () => {
         },
       }),
     );
-    const customId = "st-presets:v1:nodes-range:en-US:1:99";
+    const customId = "config:v2:st-presets-nodes-range:en-US:1:99";
 
     await route.execute({} as Client, makeButtonInteraction(customId, calls), {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["nodes-range", "en-US", "1", "99"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-nodes-range", "en-US", "1", "99"],
     });
 
     expect(calls).toEqual([
@@ -764,12 +769,12 @@ describe("ST Presets interaction routes", () => {
         },
       }),
     );
-    const customId = "st-presets:v1:nodes-range-select:en-US:1";
+    const customId = "config:v2:st-presets-nodes-range-select:en-US:1";
 
     await route.execute({} as Client, makeSelectInteraction(customId, ["0"], calls), {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["nodes-range-select", "en-US", "1"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-nodes-range-select", "en-US", "1"],
     });
 
     expect(calls).toContain("showNodesModal");
@@ -789,12 +794,12 @@ describe("ST Presets interaction routes", () => {
         },
       }),
     );
-    const customId = "st-presets:v1:nodes-range-select:en-US:1";
+    const customId = "config:v2:st-presets-nodes-range-select:en-US:1";
 
     await route.execute({} as Client, makeSelectInteraction(customId, ["not-a-range"], calls), {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["nodes-range-select", "en-US", "1"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-nodes-range-select", "en-US", "1"],
     });
 
     expect(modalShown).toBe(false);
@@ -807,14 +812,14 @@ describe("ST Presets interaction routes", () => {
 
     const modalInteraction = makeModalInteraction(
       "modal-nodes-1",
-      "st-presets:v1:nodes-submit:en-US:1:fixed-nonce-123",
+      "config:v2:st-presets-nodes-submit:en-US:1:fixed-nonce-123",
       calls,
     );
 
     await route.execute({} as Client, modalInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["nodes-submit", "en-US", "1", "fixed-nonce-123"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-nodes-submit", "en-US", "1", "fixed-nonce-123"],
     });
 
     expect(calls).toContain("takeNodeSnapshot:fixed-nonce-123");
@@ -828,24 +833,24 @@ describe("ST Presets interaction routes", () => {
     const route = createStPresetsInteractionRoute(makeDependencies(calls));
 
     // Cancel
-    const cancelInteraction = makeButtonInteraction("st-presets:v1:delete-cancel:en-US:1", calls);
+    const cancelInteraction = makeButtonInteraction("config:v2:st-presets-delete-cancel:en-US:1", calls);
 
     await route.execute({} as Client, cancelInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["delete-cancel", "en-US", "1"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-delete-cancel", "en-US", "1"],
     });
 
     expect(calls).toEqual(["deferUpdate", "resolveScope", "editReply"]);
 
     // Confirm
     calls.length = 0;
-    const confirmInteraction = makeButtonInteraction("st-presets:v1:delete-confirm:en-US:1", calls);
+    const confirmInteraction = makeButtonInteraction("config:v2:st-presets-delete-confirm:en-US:1", calls);
 
     await route.execute({} as Client, confirmInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["delete-confirm", "en-US", "1"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-delete-confirm", "en-US", "1"],
     });
 
     expect(calls).toEqual(["deferUpdate", "resolveScope", "removeWithPromotion:1", "resolveScope-fresh", "editReply"]);
@@ -873,12 +878,12 @@ describe("ST Presets interaction routes", () => {
       }),
     );
 
-    const selectInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["2"], calls);
+    const selectInteraction = makeSelectInteraction("config:v2:st-presets-select:en-US", ["2"], calls);
 
     await route.execute({} as Client, selectInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["select", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-select", "en-US"],
     });
 
     expect(calls).toEqual(["deferUpdate", "resolveScope-stale", "editReply"]);
@@ -905,42 +910,42 @@ describe("ST Presets interaction routes", () => {
 
     // add-open denied
     calls.length = 0;
-    const addOpenBtn = makeButtonInteraction("st-presets:v1:add-open:en-US", calls, nonManagerOverrides);
+    const addOpenBtn = makeButtonInteraction("config:v2:st-presets-add-open:en-US", calls, nonManagerOverrides);
     await route.execute({} as Client, addOpenBtn, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["add-open", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-add-open", "en-US"],
     });
     expect(calls).toEqual(["reply-denied"]);
     expect(JSON.stringify(replyPayload)).toContain("Manage Server");
 
     // select "add" denied
     calls.length = 0;
-    const selectAdd = makeSelectInteraction("st-presets:v1:select:en-US", ["add"], calls, nonManagerOverrides);
+    const selectAdd = makeSelectInteraction("config:v2:st-presets-select:en-US", ["add"], calls, nonManagerOverrides);
     await route.execute({} as Client, selectAdd, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["select", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-select", "en-US"],
     });
     expect(calls).toEqual(["reply-denied"]);
 
     // nodes-open denied
     calls.length = 0;
-    const nodesOpen = makeButtonInteraction("st-presets:v1:nodes-open:en-US:1", calls, nonManagerOverrides);
+    const nodesOpen = makeButtonInteraction("config:v2:st-presets-nodes-open:en-US:1", calls, nonManagerOverrides);
     await route.execute({} as Client, nodesOpen, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["nodes-open", "en-US", "1"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-nodes-open", "en-US", "1"],
     });
     expect(calls).toEqual(["reply-denied"]);
 
     // select activation denied without write
     calls.length = 0;
-    const selectPreset = makeSelectInteraction("st-presets:v1:select:en-US", ["2"], calls, nonManagerOverrides);
+    const selectPreset = makeSelectInteraction("config:v2:st-presets-select:en-US", ["2"], calls, nonManagerOverrides);
     await route.execute({} as Client, selectPreset, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["select", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-select", "en-US"],
     });
     expect(calls).toEqual(["deferUpdate", "editReply-denied"]);
     expect(JSON.stringify(editReplyPayload)).toContain("Manage Server");
@@ -948,22 +953,22 @@ describe("ST Presets interaction routes", () => {
 
     // disable denied without write
     calls.length = 0;
-    const disableBtn = makeButtonInteraction("st-presets:v1:disable:en-US", calls, nonManagerOverrides);
+    const disableBtn = makeButtonInteraction("config:v2:st-presets-disable:en-US", calls, nonManagerOverrides);
     await route.execute({} as Client, disableBtn, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["disable", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-disable", "en-US"],
     });
     expect(calls).toEqual(["deferUpdate", "editReply-denied"]);
     expect(calls).not.toContain("deactivateAll");
 
     // delete-confirm denied without write
     calls.length = 0;
-    const deleteBtn = makeButtonInteraction("st-presets:v1:delete-confirm:en-US:1", calls, nonManagerOverrides);
+    const deleteBtn = makeButtonInteraction("config:v2:st-presets-delete-confirm:en-US:1", calls, nonManagerOverrides);
     await route.execute({} as Client, deleteBtn, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["delete-confirm", "en-US", "1"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-delete-confirm", "en-US", "1"],
     });
     expect(calls).toEqual(["deferUpdate", "editReply-denied"]);
     expect(calls).not.toContain("removeWithPromotion:1");
@@ -973,15 +978,15 @@ describe("ST Presets interaction routes", () => {
     const calls: string[] = [];
     const route = createStPresetsInteractionRoute(makeDependencies(calls));
 
-    const dmInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["2"], calls, {
+    const dmInteraction = makeSelectInteraction("config:v2:st-presets-select:en-US", ["2"], calls, {
       guildId: null,
       memberPermissions: null,
     });
 
     await route.execute({} as Client, dmInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["select", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-select", "en-US"],
     });
 
     expect(calls).toEqual(["deferUpdate", "resolveScope", "activate:2", "resolveScope-fresh", "editReply"]);
@@ -995,31 +1000,31 @@ describe("ST Presets interaction routes", () => {
 
     // Activate preset via select
     const activateRoute = createStPresetsInteractionRoute(makeDependencies([], { recordAction }));
-    const activateInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["2"], []);
+    const activateInteraction = makeSelectInteraction("config:v2:st-presets-select:en-US", ["2"], []);
     await activateRoute.execute({} as Client, activateInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["select", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-select", "en-US"],
     });
     expect(recorded).toContain("st-presets.workspace.preset.activate:1:100");
 
     // Deactivate via select none
     const deactivateSelectRoute = createStPresetsInteractionRoute(makeDependencies([], { recordAction }));
-    const deactivateSelectInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["none"], []);
+    const deactivateSelectInteraction = makeSelectInteraction("config:v2:st-presets-select:en-US", ["none"], []);
     await deactivateSelectRoute.execute({} as Client, deactivateSelectInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["select", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-select", "en-US"],
     });
     expect(recorded).toContain("st-presets.workspace.preset.deactivate:1:100");
 
     // Deactivate via disable button
     const disableButtonRoute = createStPresetsInteractionRoute(makeDependencies([], { recordAction }));
-    const disableButtonInteraction = makeButtonInteraction("st-presets:v1:disable:en-US", []);
+    const disableButtonInteraction = makeButtonInteraction("config:v2:st-presets-disable:en-US", []);
     await disableButtonRoute.execute({} as Client, disableButtonInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["disable", "en-US"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-disable", "en-US"],
     });
     expect(recorded).toContain("st-presets.workspace.preset.deactivate:1:100");
 
@@ -1027,7 +1032,7 @@ describe("ST Presets interaction routes", () => {
     const addRoute = createStPresetsInteractionRoute(makeDependencies([], { recordAction }));
     const addInteraction = {
       id: "submit-add",
-      customId: "st-presets:v1:add-submit:en-US:fixed-nonce-123",
+      customId: "config:v2:st-presets-add-submit:en-US:fixed-nonce-123",
       guildId: "100",
       user: { id: "100" },
       memberPermissions: { has: () => true },
@@ -1039,9 +1044,9 @@ describe("ST Presets interaction routes", () => {
       fields: { getTextInputValue: () => "My Preset" },
     } as unknown as ModalSubmitInteraction;
     await addRoute.execute({} as Client, addInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["add-submit", "en-US", "fixed-nonce-123"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-add-submit", "en-US", "fixed-nonce-123"],
     });
     expect(recorded).toContain("st-presets.workspace.preset.add:1:100");
 
@@ -1049,7 +1054,7 @@ describe("ST Presets interaction routes", () => {
     const nodesRoute = createStPresetsInteractionRoute(makeDependencies([], { recordAction }));
     const nodesInteraction = {
       id: "submit-nodes",
-      customId: "st-presets:v1:nodes-submit:en-US:1:fixed-nonce-123",
+      customId: "config:v2:st-presets-nodes-submit:en-US:1:fixed-nonce-123",
       guildId: "100",
       user: { id: "100" },
       memberPermissions: { has: () => true },
@@ -1060,19 +1065,19 @@ describe("ST Presets interaction routes", () => {
       editReply: async () => {},
     } as unknown as ModalSubmitInteraction;
     await nodesRoute.execute({} as Client, nodesInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["nodes-submit", "en-US", "1", "fixed-nonce-123"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-nodes-submit", "en-US", "1", "fixed-nonce-123"],
     });
     expect(recorded).toContain("st-presets.workspace.nodes.save:1:100");
 
     // Delete preset (delete-confirm)
     const deleteRoute = createStPresetsInteractionRoute(makeDependencies([], { recordAction }));
-    const deleteInteraction = makeButtonInteraction("st-presets:v1:delete-confirm:en-US:1", []);
+    const deleteInteraction = makeButtonInteraction("config:v2:st-presets-delete-confirm:en-US:1", []);
     await deleteRoute.execute({} as Client, deleteInteraction, {
-      namespace: "st-presets",
-      version: "v1",
-      segments: ["delete-confirm", "en-US", "1"],
+      namespace: "config",
+      version: "v2",
+      segments: ["st-presets-delete-confirm", "en-US", "1"],
     });
     expect(recorded).toContain("st-presets.workspace.preset.remove:1:100");
   });

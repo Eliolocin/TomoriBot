@@ -14,6 +14,19 @@ Add a provider key during first-time setup with `/setup`, or later from `/provid
 **Add New Provider**. Keys are **encrypted at rest** — no one, including server admins, can read
 them back.
 
+`/setup` asks how replies should reach a model before anything else, and the answer decides what it
+collects:
+
+| Mode | What it collects |
+|---|---|
+| **AI Provider (Recommended)** | A provider from the catalog plus its API key, validated and encrypted as a draft. |
+| **Custom Endpoint (Advanced)** | The endpoint's connection and one text model, registered inside the wizard. See [Custom Endpoints](#custom-endpoints). |
+| **User BYOK** (guilds only) | Nothing: the workspace keeps no provider of its own, so members must supply personal ones. |
+
+Nothing is written until **Finish Setup**, so an abandoned or expired wizard leaves the workspace's
+existing provider rows alone. To replace a key that is already stored, use `/providers`, because
+`/setup` refuses to run on a workspace that is already configured.
+
 Each provider has its own key-generation steps. Run **`/help`**, choose **Setup**, then **Step 1: Get an API Key**, and pick your
 provider for the exact walkthrough, or use these starting points:
 
@@ -110,6 +123,15 @@ model catalog entry. `/providers` remains the endpoint registration, model setup
 API compatibility determines the request paths and payloads the service implements, so it also determines which
 capability slots the connection prepares. Registering exact models for those slots is a separate step, and the
 protocol cannot be inferred reliably from the endpoint URL.
+
+`/setup`'s **Custom Endpoint (Advanced)** mode performs the same two steps inside the wizard:
+**Configure Connection** saves the API compatibility, label, URL, and optional auth token behind a
+reachability check, and **Configure Text Model** registers the exact text model and its capability
+declarations. The model button stays disabled until a connection validates, and re-saving the
+connection clears the model declaration because the declarations depend on the API compatibility.
+The wizard creates the connection, saved provider, model, and active-model rows together when you
+press **Finish Setup**, so it never leaves a connection that has no usable text model. It registers
+text models only; image, video, TTS, and STT capabilities are still registered in `/providers`.
 
 For full walkthroughs of running the servers, see:
 

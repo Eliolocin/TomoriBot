@@ -36,12 +36,6 @@ const registry = new InteractionRouteRegistry([
   transferInteractionRoute,
 ]);
 
-// An unregistered namespace dispatches as unmatched, so rendered controls would otherwise fail silently.
-const RETIRED_PANEL_COMMANDS: Readonly<Record<string, string>> = {
-  mcps: "/config",
-  "st-presets": "/config",
-};
-
 export function isGlobalRoutableInteraction(interaction: Interaction): interaction is GlobalRoutableInteraction {
   return interaction.isMessageComponent() || interaction.isModalSubmit();
 }
@@ -53,17 +47,7 @@ export async function dispatchGlobalInteraction(
   try {
     const result = await registry.dispatchDetailed(client, interaction);
     if (result === "unmatched") {
-      const namespace = interaction.customId.split(":", 1)[0] ?? "";
-      const command = RETIRED_PANEL_COMMANDS[namespace];
-      if (!command) return false;
-
-      await interaction.reply({
-        content: localizer(interaction.locale ?? interaction.guildLocale ?? "en-US", "general.errors.outdated_panel", {
-          command,
-        }),
-        flags: MessageFlags.Ephemeral,
-      });
-      return true;
+      return false;
     }
     if (result === "stale-version") {
       const namespace = interaction.customId.split(":", 1)[0] ?? "panel";

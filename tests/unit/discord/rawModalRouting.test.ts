@@ -30,7 +30,7 @@ describe("routed raw modal gateway support", () => {
           id: "modal-submit-1",
           type: 5,
           data: {
-            custom_id: "mcps:v1:add-submit:en-US:12345678",
+            custom_id: "config:v2:mcp-add-submit:en-US:12345678",
             components: [
               {
                 type: 18,

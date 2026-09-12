@@ -895,7 +895,6 @@ describe("isConfigRouteAuthorized", () => {
       "persona-page-select",
       "persona-select",
       "persona-page",
-      "naming-style-select",
       "promote-cancel",
       "retry",
       "refresh",

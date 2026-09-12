@@ -389,7 +389,6 @@ export type ConfigPanelRoute =
   | { action: "avatar-submit"; locale: string; personaId: number; nonce: string }
   | { action: "rename-open"; locale: string; personaId: number }
   | { action: "rename-submit"; locale: string; personaId: number; nonce: string }
-  | { action: "naming-style-select"; locale: string; personaId: number }
   | { action: "naming-open"; locale: string; personaId: number; style: AddressingStyle }
   | { action: "naming-submit"; locale: string; personaId: number; style: AddressingStyle; nonce: string }
   | { action: "trigger-add-open"; locale: string; personaId: number }
@@ -875,7 +874,6 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "avatar-submit": { wireToken: "avatar-submit", fields: [personaIdField, nonceField] },
   "rename-open": { wireToken: "rename-open", fields: [personaIdField] },
   "rename-submit": { wireToken: "rename-submit", fields: [personaIdField, nonceField] },
-  "naming-style-select": { wireToken: "naming-style", fields: [personaIdField] },
   "naming-open": { wireToken: "naming-open", fields: [personaIdField, styleField] },
   "naming-submit": { wireToken: "naming-submit", fields: [personaIdField, styleField, nonceField] },
   "trigger-add-open": { wireToken: "trig-add-open", fields: [personaIdField] },

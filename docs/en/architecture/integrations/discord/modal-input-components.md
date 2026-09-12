@@ -615,6 +615,29 @@ Implemented examples:
 - `/config` > Behavior > Trigger adds a random trigger for any persona page: past 24 selectable personas the Add button becomes a range select that opens the modal on the chosen page, because the modal repeats its fixed Random entry on every page and that entry spends one of Discord's 25 option slots.
 - `/server trigger remove` manages trigger words for the selected persona in one modal when the set fits, with paginated fallback beyond modal limits.
 
+### `/setup` Wizard Modals
+
+The setup wizard builds every modal in `src/utils/discord/ui/setupPanel.ts` from the draft it is editing,
+and each one is a working example of the nesting rule above. Copy the shape from here rather than from
+memory, because a raw component's `type` is a bare `number` and a wrong one still compiles, still
+submits, and reads back as nothing:
+
+| Modal | Builder | Rows |
+|---|---|---|
+| Provider API Key | `buildSetupCatalogModal` | Label (18) around a provider select (3), Label (18) around an API key input (4) |
+| Custom Endpoint connection | `buildSetupEndpointConnectionModal` | Label (18) around an API style select (3), then one Label (18) each around the label, URL, and optional auth token inputs (4) |
+| Custom Endpoint text model | `buildSetupEndpointModelModal` | Label (18) around the model code input (4), Label (18) around the context size input (4), Label (18) around a capability checkbox group (22) |
+| User BYOK | `buildSetupByokModal` | A Text Display (10) explaining the mode, then a required yes/no Radio Group (21) in a Label (18) |
+| Starting Settings | `buildSetupSettingsModal` | Four Labels (18): a persona select (3), a reply style select (3), a timezone input (4), and a system prompt select (3) |
+| Policies acceptance | `buildSetupPoliciesModal` | A Text Display (10) carrying both documentation links, then a required Checkbox Group (22) in a Label (18) with one option per document |
+
+Two consequences are load-bearing. Every value the wizard needs to read back sits inside a `type: 18`
+Label, because the raw-modal interception is gated on the packet carrying a type-18 component and walks
+only type-18 children: a control at the modal root renders, submits, and arrives empty. And a modal
+string select cannot be pre-filled, so the wizard's three selects reopen on their placeholders while
+its timezone text input comes back carrying the stored value, which has to parse as the value the
+editor wrote rather than as the label the panel shows.
+
 ---
 
 ## TomoriBot Migration Audit
@@ -628,7 +651,7 @@ These modals use a String Select with a small, fixed, mutually exclusive option 
 | Command                   | File                         | Custom ID              | Current Input | Options                                   | Why Radio Group                                     |
 | ------------------------- | ---------------------------- | ---------------------- | ------------- | ----------------------------------------- | --------------------------------------------------- |
 | `/config` > Engine > General       | `config/humanizer.ts`        | `humanizer_select`     | String Select | 4-5 (none/light/moderate/heavy; + inherit with `scope: Persona`) | Fixed set of mutually exclusive degrees             |
-| `/setup`           | `setup.ts`            | `humanizer_degree`     | String Select | 4 (none/light/default/heavy)              | Same fixed humanizer degree set as above            |
+| `/setup`           | `utils/discord/ui/setupPanel.ts` | `humanizer_{nonce}`    | String Select | 4 (none/light/default/heavy)              | Same fixed humanizer degree set as above; shipped inside the Starting Settings modal's `type: 18` Label |
 | `/personal config`       | `utils/discord/ui/personalConfigPanel.ts` | `privacy_select`       | String Select | 3 (minimal/partial/full)                  | Fixed set of 3 mutually exclusive levels            |
 | `/generate image`         | `generate/image.ts`          | `aspect_ratio_select`  | String Select | 10 (1:1, 2:3, 3:2, 3:4, 4:3, etc.)      | Fixed set of 10 aspect ratios — at the limit        |
 | `/config` > Plugins > MCP Servers Add form | `discord/ui/mcpsPanel.ts` | `server-type_{nonce}` | Radio Group | 3 (General Purpose/Web Search/URL Fetcher) | Already migrated: required routed field with General Purpose selected by default |

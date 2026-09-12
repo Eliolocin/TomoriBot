@@ -3,6 +3,7 @@ import { ButtonStyle, ComponentType } from "discord.js";
 import type { GuildMcpServerRow } from "@/types/db/schema";
 import type { PanelReceipt } from "@/types/discord/panel";
 import { buildAddMcpModal, buildMcpsPanelPayload } from "@/utils/discord/ui/mcpsPanel";
+import { CONFIG_MCP_PANEL_ROUTE_ADAPTER } from "@/utils/discord/configPanelCatalog";
 import {
   DISCORD_MESSAGE_TOTAL_COMPONENTS_MAX,
   validateComponentsV2MessageLimits,
@@ -38,13 +39,14 @@ describe("MCP collection panel", () => {
       configs: [],
       readStatus: "fresh",
       page: { kind: "collection" },
+      routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
     });
     const serialized = JSON.stringify(payload);
     expect(serialized).toContain("Registered MCPs `(0/10)`");
     expect(serialized).toContain("This server has no MCPs yet.");
     expect(serialized).toContain(`"type":${ComponentType.Separator}`);
     expect(serialized).toContain(
-      `"style":${ButtonStyle.Secondary},"customId":"mcps:v1:add-open:en-US","label":"+ Add MCP"`,
+      `"style":${ButtonStyle.Secondary},"customId":"config:v2:mcp-add-open:en-US","label":"+ Add MCP"`,
     );
     expect(serialized).not.toContain('"label":"Retry"');
     expect(serialized).not.toContain('"label":"Refresh"');
@@ -68,14 +70,15 @@ describe("MCP collection panel", () => {
       configs,
       readStatus: "fresh",
       page: { kind: "collection", selectedId: 3, rangeIndex: 8 },
+      routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
     });
     const serialized = JSON.stringify(payload);
     expect(serialized).toContain("Registered MCPs `(5/10)`");
     expect(serialized.indexOf("first")).toBeLessThan(serialized.indexOf("second"));
     expect(serialized.indexOf("second")).toBeLessThan(serialized.indexOf("third"));
     for (const id of [1, 2, 3, 4, 5]) {
-      expect(serialized).toContain(`mcps:v1:remove-prompt:en-US:${id}`);
-      expect(serialized).toContain(`mcps:v1:set-enabled:en-US:${id}:`);
+      expect(serialized).toContain(`config:v2:mcp-remove-prompt:en-US:${id}`);
+      expect(serialized).toContain(`config:v2:mcp-set-enabled:en-US:${id}:`);
     }
     expect(serialized).toContain("- third (`https://example.com:3`)\\n> Disabled URL Fetcher Tool");
     expect(serialized).toContain("- second (`https://example.com:2`)\\n> Enabled Web Search Tool");
@@ -86,11 +89,12 @@ describe("MCP collection panel", () => {
         configs: [configs[0] as GuildMcpServerRow],
         readStatus: "fresh",
         page: { kind: "collection" },
+        routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
       }),
     );
     expect(japanese).toContain("> URL取得ツール（無効）");
-    expect(serialized).not.toContain("mcps:v1:select");
-    expect(serialized).not.toContain("mcps:v1:range");
+    expect(serialized).not.toContain("config:v2:mcp-select");
+    expect(serialized).not.toContain("config:v2:mcp-range");
     expect(serialized).not.toContain(`"type":${ComponentType.StringSelect}`);
     const result = validateComponentsV2MessageLimits(payload);
     expect(
@@ -107,6 +111,7 @@ describe("MCP collection panel", () => {
         configs: [row(8443)],
         readStatus: "fresh",
         page: { kind: "collection" },
+        routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
       }),
     );
     expect(serialized).toContain("- server\\\\-8443 (`https://example.com:8443`)\\n> Enabled General Purpose Tool");
@@ -132,6 +137,7 @@ describe("MCP collection panel", () => {
         ],
         readStatus: "fresh",
         page: { kind: "collection" },
+        routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
       }),
     );
     expect(serialized).toContain("Tools: Discovery unknown");
@@ -148,13 +154,14 @@ describe("MCP collection panel", () => {
         configs: [row(1)],
         readStatus: "stale",
         page: { kind: "collection" },
+        routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
       }),
     );
     expect(serialized).toContain("out of date");
-    expect(serialized).toContain('"customId":"mcps:v1:set-enabled:en-US:1:0","label":"Disable","disabled":true');
-    expect(serialized).toContain('"customId":"mcps:v1:remove-prompt:en-US:1","label":"Remove","disabled":true');
-    expect(serialized).toContain('"customId":"mcps:v1:add-open:en-US","label":"+ Add MCP","disabled":true');
-    expect(serialized).toContain('"customId":"mcps:v1:retry:en-US:1","label":"Retry"');
+    expect(serialized).toContain('"customId":"config:v2:mcp-set-enabled:en-US:1:0","label":"Disable","disabled":true');
+    expect(serialized).toContain('"customId":"config:v2:mcp-remove-prompt:en-US:1","label":"Remove","disabled":true');
+    expect(serialized).toContain('"customId":"config:v2:mcp-add-open:en-US","label":"+ Add MCP","disabled":true');
+    expect(serialized).toContain('"customId":"config:v2:mcp-retry:en-US:1","label":"Retry"');
     expect(serialized).not.toContain('"label":"Refresh"');
   });
 
@@ -166,13 +173,14 @@ describe("MCP collection panel", () => {
       readStatus: "stale",
       page: { kind: "collection", rangeIndex: 99 },
       receipt: receipt("warning"),
+      routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
     });
     const serialized = JSON.stringify(payload);
     expect(serialized).toContain("Registered MCPs `(8/10)`");
     expect(serialized).toContain("Page 2 of 2");
-    expect(serialized).toContain("mcps:v1:remove-prompt:en-US:7");
-    expect(serialized).not.toContain("mcps:v1:remove-prompt:en-US:6");
-    expect(serialized).toContain('"customId":"mcps:v1:add-open:en-US","label":"+ Add MCP","disabled":true');
+    expect(serialized).toContain("config:v2:mcp-remove-prompt:en-US:7");
+    expect(serialized).not.toContain("config:v2:mcp-remove-prompt:en-US:6");
+    expect(serialized).toContain('"customId":"config:v2:mcp-add-open:en-US","label":"+ Add MCP","disabled":true');
     const result = validateComponentsV2MessageLimits(payload);
     expect(
       result.valid,
@@ -190,6 +198,7 @@ describe("MCP collection panel", () => {
         readStatus: "fresh",
         page: { kind: "collection" },
         receipt: receipt(tone),
+        routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
       });
       expect(payload.components).toHaveLength(2);
       const serializedPanel = JSON.stringify(payload.components[0]);
@@ -198,7 +207,7 @@ describe("MCP collection panel", () => {
       expect(serializedReceipt).toContain(`${tone} heading`);
       expect(serializedReceipt).not.toContain('"type":2');
       expect(serializedPanel).toContain('"accentColor":6670021');
-      expect(serializedPanel).toContain("mcps:v1:set-enabled:en-US:1:0");
+      expect(serializedPanel).toContain("config:v2:mcp-set-enabled:en-US:1:0");
     }
   });
 
@@ -210,6 +219,7 @@ describe("MCP collection panel", () => {
         configs: [row(1, { url: "not a URL", auth_token: null })],
         readStatus: "fresh",
         page: { kind: "collection" },
+        routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
       }),
     );
     expect(serialized).toContain("Unavailable");
@@ -224,10 +234,11 @@ describe("MCP collection panel", () => {
         configs: Array.from({ length: 10 }, (_, index) => row(index + 1)),
         readStatus: "fresh",
         page: { kind: "collection" },
+        routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
       }),
     );
-    expect(serialized).toContain('"customId":"mcps:v1:add-open:en-US","label":"+ Add MCP","disabled":true');
-    expect(serialized).toContain('"customId":"mcps:v1:set-enabled:en-US:1:0","label":"Disable","disabled":false');
+    expect(serialized).toContain('"customId":"config:v2:mcp-add-open:en-US","label":"+ Add MCP","disabled":true');
+    expect(serialized).toContain('"customId":"config:v2:mcp-set-enabled:en-US:1:0","label":"Disable","disabled":false');
   });
 
   it("never converts an absent Remove target into confirmation for a current row", () => {
@@ -238,10 +249,11 @@ describe("MCP collection panel", () => {
         configs: [row(1)],
         readStatus: "fresh",
         page: { kind: "remove", entityId: 999 },
+        routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
       }),
     );
-    expect(serialized).toContain("mcps:v1:remove-prompt:en-US:1");
-    expect(serialized).not.toContain("mcps:v1:remove-confirm:en-US:1");
+    expect(serialized).toContain("config:v2:mcp-remove-prompt:en-US:1");
+    expect(serialized).not.toContain("config:v2:mcp-remove-confirm:en-US:1");
   });
 
   it("distinguishes unavailable reads from an authoritative empty collection", () => {
@@ -252,6 +264,7 @@ describe("MCP collection panel", () => {
         configs: [],
         readStatus: "unavailable",
         page: { kind: "collection" },
+        routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
       }),
     );
     const empty = JSON.stringify(
@@ -261,6 +274,7 @@ describe("MCP collection panel", () => {
         configs: [],
         readStatus: "fresh",
         page: { kind: "collection" },
+        routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
       }),
     );
     expect(unavailable).toContain("could not be loaded");
@@ -272,8 +286,8 @@ describe("MCP collection panel", () => {
   });
 
   it("builds a nonce-bounded Add modal with required, defaulted server type semantics", () => {
-    const serialized = JSON.stringify(buildAddMcpModal("en-US", "12345678"));
-    expect(serialized).toContain('"custom_id":"mcps:v1:add-submit:en-US:12345678"');
+    const serialized = JSON.stringify(buildAddMcpModal("en-US", "12345678", CONFIG_MCP_PANEL_ROUTE_ADAPTER));
+    expect(serialized).toContain('"custom_id":"config:v2:mcp-add-submit:en-US:12345678"');
     expect(serialized).toContain('"custom_id":"name_12345678"');
     expect(serialized).toContain('"custom_id":"url_12345678"');
     expect(serialized).toContain('"custom_id":"auth-token_12345678"');
@@ -288,6 +302,8 @@ describe("MCP collection panel", () => {
     expect(serialized).toContain('"value":"url_fetcher","label":"URL Fetcher"');
     expect(serialized).toContain("Disables built-in URL fetch tool");
     expect(serialized).not.toContain('"label":"Server Type (Optional)"');
-    expect(JSON.stringify(buildAddMcpModal("ja", "12345678"))).not.toContain('"label":"サーバータイプ（任意）"');
+    expect(JSON.stringify(buildAddMcpModal("ja", "12345678", CONFIG_MCP_PANEL_ROUTE_ADAPTER))).not.toContain(
+      '"label":"サーバータイプ（任意）"',
+    );
   });
 });

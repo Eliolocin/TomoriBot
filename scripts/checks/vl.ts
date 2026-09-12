@@ -661,10 +661,14 @@ const CATEGORIES = {
   DB: (r: ResultItem) =>
     isNamedCheck(r) &&
     (r.name.includes("Schema Drift") || r.name.includes("Lifecycle") || r.name.includes("Migration Files")),
-  LOCALES: (r: ResultItem) => isNamedCheck(r) && r.name.includes("Localization"),
+  LOCALES: (r: ResultItem) =>
+    isNamedCheck(r) && (r.name.includes("Localization") || r.name.includes("Config Breadcrumbs")),
   DOCUMENTATION: (r: ResultItem) =>
     isNamedCheck(r) &&
-    (r.name.includes("Command Reference") || r.name.includes("Command Mentions") || r.name.includes("Comment Audit")),
+    (r.name.includes("Command Reference") ||
+      r.name.includes("Command Mentions") ||
+      r.name.includes("Command Roots") ||
+      r.name.includes("Comment Audit")),
 };
 
 async function main() {
@@ -696,6 +700,7 @@ async function main() {
     dbLifecycleResult,
     localesResult,
     localeLengthsResult,
+    configBreadcrumbsResult,
   ] = await Promise.all([
     runCheck("Type Check (bun run check)", ["bun", "run", "check"], true),
     runLint(),
@@ -756,6 +761,12 @@ async function main() {
       true,
       true,
     ),
+    runCheck(
+      "Config Breadcrumbs (bun run check-config-breadcrumbs)",
+      ["bun", "run", "check-config-breadcrumbs"],
+      true,
+      true,
+    ),
   ]);
 
   // This check imports the complete command graph. Keep it outside the parallel
@@ -771,6 +782,14 @@ async function main() {
   const commandMentionsResult = await runCheck(
     "Command Mentions (bun run check-command-mentions)",
     ["bun", "run", "check-command-mentions"],
+    true,
+    true,
+  );
+
+  // Also loads the complete command graph, so it stays serialized alongside the checks above.
+  const commandRootsResult = await runCheck(
+    "Command Roots Documentation (bun run check-command-roots)",
+    ["bun", "run", "check-command-roots"],
     true,
     true,
   );
@@ -791,8 +810,10 @@ async function main() {
     dbLifecycleResult,
     localesResult,
     localeLengthsResult,
+    configBreadcrumbsResult,
     commandReferenceResult,
     commandMentionsResult,
+    commandRootsResult,
   ];
 
   console.log("\n====================================");
@@ -833,6 +854,10 @@ async function main() {
       "Discord truncates modal placeholders/descriptions and select-option labels/descriptions (>100 chars), modal titles/labels (>45), and command descriptions (>100). Shorten the listed locale strings — both `en-US` and `ja` sides must fit.",
     "Command Reference":
       "Run `bun run generate-command-reference` and commit the regenerated docs/en/features/command-reference.md.",
+    "Command Roots":
+      "Update the documented top-level categories in docs/en/architecture/subsystems/command-system.md to match runtime registration.",
+    "Config Breadcrumbs":
+      "Update breadcrumb calls in helpCatalog.ts to match CONFIG_PAGES_BY_CATEGORY and config labels.",
   };
 
   const getHint = (name: string) => {

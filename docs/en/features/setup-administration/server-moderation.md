@@ -29,7 +29,9 @@ spend entirely to members. Members set theirs up under
 [Personalization → Your Own Providers](/features/knowledge/personalization/#your-own-providers).
 
 You can also bootstrap a server with **no** server-side text provider at all by choosing
-"User BYOK" during `/setup`.
+**User BYOK** during `/setup`. It is offered in servers rather than in DMs, and it asks for
+confirmation before completing the provider step, because the workspace then has no provider to fall
+back to.
 
 ## Access Control: Whitelists
 

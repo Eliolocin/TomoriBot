@@ -4,7 +4,6 @@ import { terminalPayload as buildConfigTerminalPayload } from "@/utils/discord/i
 import { terminalPayload as buildPersonalConfigTerminalPayload } from "@/utils/discord/interactions/personalConfigRouteContext";
 import { buildGeneratedImageComponentsV2Payload } from "@/utils/discord/generatedImageMessage";
 import { buildGeneratedVideoComponentsV2Payload } from "@/utils/discord/generatedVideoMessage";
-import { buildProviderPickerPayload } from "@/utils/discord/ui/anchorModelFlow";
 import { buildRangeSelectorPayload } from "@/utils/discord/ui/interactionCore";
 import { buildPersonaWorkflowNotice } from "@/utils/discord/ui/personaWorkflow";
 import { validateComponentsV2MessageLimits } from "@/utils/discord/ui/componentsV2Limits";
@@ -45,19 +44,6 @@ describe("Declared Components V2 producer smoke fixtures", () => {
     assertValidPayload(
       buildGeneratedVideoComponentsV2Payload("generated.mp4", 2_500, "en-US"),
       "generatedVideoMessage.buildGeneratedVideoComponentsV2Payload",
-    );
-  });
-
-  it("validates the anchor model picker payload", () => {
-    assertValidPayload(
-      buildProviderPickerPayload(
-        "en-US",
-        "smoke-picker",
-        ["google", "openrouter"],
-        [{ provider: "google", model: "gemini/example" }],
-        { note: "Choose a provider for this model capability." },
-      ),
-      "anchorModelFlow.buildProviderPickerPayload",
     );
   });
 

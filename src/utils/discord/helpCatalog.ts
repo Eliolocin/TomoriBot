@@ -85,8 +85,8 @@ function mention(command: string, subcommandOrGroup?: string, subcommand?: strin
  * sentence naming several of them would repeat an identical token with nothing to tell the pages
  * apart. The breadcrumb carries the distinction the subcommand name used to.
  */
-function configPage(breadcrumb: string): string {
-  return `${commandRegistry.getCommandMention("config", undefined, undefined, true)} > ${breadcrumb}`;
+function configPage(locale: string, breadcrumbKey: string): string {
+  return `${commandRegistry.getCommandMention("config", undefined, undefined, true)} > ${localizer(locale, breadcrumbKey)}`;
 }
 
 const setupPages: readonly HelpPageDefinition[] = [
@@ -124,10 +124,10 @@ const setupPages: readonly HelpPageDefinition[] = [
     docsPath: DOCS_PATHS.QUICKSTART,
     sections: [],
     titleHeadingLevel: 3,
-    variables: () => ({
-      personaTrigger: configPage("Persona > General"),
-      configPermissions: configPage("Permissions"),
-      serverAutotrigger: configPage("Channels > Auto-Trigger"),
+    variables: (locale) => ({
+      personaTrigger: configPage(locale, "commands.help.breadcrumbs.persona.general"),
+      configPermissions: configPage(locale, "commands.help.breadcrumbs.plugins.available-tools"),
+      serverAutotrigger: configPage(locale, "commands.help.breadcrumbs.channels.auto-trigger"),
     }),
   },
   {
@@ -182,15 +182,15 @@ const featureOverviewPage: HelpPageDefinition = {
   variables: () => ({ version: packageVersion }),
 };
 
-function customEndpointVariables(): HelpVariables {
+function customEndpointVariables(locale: string): HelpVariables {
   return {
     add_command: mention("providers"),
     remove_command: mention("providers"),
     server_add_command: mention("providers"),
     personal_add_command: mention("personal", "providers"),
-    text_command: configPage("Models > Switch Models"),
-    image_command: configPage("Models > Switch Models"),
-    video_command: configPage("Models > Switch Models"),
+    text_command: configPage(locale, "commands.help.breadcrumbs.models.switch"),
+    image_command: configPage(locale, "commands.help.breadcrumbs.models.switch"),
+    video_command: configPage(locale, "commands.help.breadcrumbs.models.switch"),
   };
 }
 
@@ -223,7 +223,7 @@ function transcriptionVariables(locale: string): HelpVariables {
     custom_endpoint_add: mention("providers"),
     model_transcription: mention("providers"),
     elevenlabs: mention("providers"),
-    speech_transcripts: configPage("Behavior > Notices"),
+    speech_transcripts: configPage(locale, "commands.help.breadcrumbs.behavior.notices"),
     help_speech: buildHelpPageReference(locale, "commands.help.dashboard.pages.speech"),
   };
 }
@@ -418,12 +418,12 @@ const memoryPages: readonly HelpPageDefinition[] = [
     ],
     variables: (locale) => ({
       helpMemory: buildHelpPageReference(locale, "commands.help.dashboard.pages.persistent_memory"),
-      stmParameters: configPage("Behavior > Memory & STM"),
-      stmPromptEdit: configPage("Behavior > Memory & STM"),
-      stmCategoriesEdit: configPage("Behavior > Memory & STM"),
+      stmParameters: configPage(locale, "commands.help.breadcrumbs.behavior.memory"),
+      stmPromptEdit: configPage(locale, "commands.help.breadcrumbs.behavior.memory"),
+      stmCategoriesEdit: configPage(locale, "commands.help.breadcrumbs.behavior.memory"),
       stmManage: mention("memories"),
-      stmPrivacyBypass: configPage("Permissions > Memory Privacy"),
-      personaStmEdit: configPage("Persona > Memories"),
+      stmPrivacyBypass: configPage(locale, "commands.help.breadcrumbs.channels.rules"),
+      personaStmEdit: configPage(locale, "commands.help.breadcrumbs.persona.memories"),
     }),
   },
   {
@@ -442,8 +442,8 @@ const memoryPages: readonly HelpPageDefinition[] = [
         bodyKey: "commands.help.memory-tagging.channels_description",
       },
     ],
-    variables: () => ({
-      memoryTaggingSet: configPage("Behavior > Memory & STM"),
+    variables: (locale) => ({
+      memoryTaggingSet: configPage(locale, "commands.help.breadcrumbs.behavior.memory"),
       toolPromptSnapshot: mention("tool", "prompt", "snapshot"),
     }),
   },
@@ -474,12 +474,12 @@ const behaviorPages: readonly HelpPageDefinition[] = [
       helpMemory: buildHelpPageReference(locale, "commands.help.dashboard.pages.persistent_memory"),
       personaCreate: mention("persona", "create"),
       personaGenerate: mention("persona", "generate"),
-      personaAttributeAdd: configPage("Persona > General"),
-      personaSampleDialogueAdd: configPage("Persona > General"),
-      configModel: configPage("Models > Switch Models"),
-      configHumanizer: configPage("Behavior > General"),
-      configSystemPromptSet: configPage("Behavior > General"),
-      capabilitiesManage: configPage("Permissions"),
+      personaAttributeAdd: configPage(locale, "commands.help.breadcrumbs.persona.general"),
+      personaSampleDialogueAdd: configPage(locale, "commands.help.breadcrumbs.persona.general"),
+      configModel: configPage(locale, "commands.help.breadcrumbs.models.switch"),
+      configHumanizer: configPage(locale, "commands.help.breadcrumbs.behavior.general"),
+      configSystemPromptSet: configPage(locale, "commands.help.breadcrumbs.behavior.general"),
+      capabilitiesManage: configPage(locale, "commands.help.breadcrumbs.plugins.available-tools"),
       serverWhitelistChannel: mention("moderation"),
     }),
   },
@@ -527,8 +527,8 @@ const behaviorPages: readonly HelpPageDefinition[] = [
       },
     ],
     footerKey: "commands.help.deliberate-trigger-mode.footer",
-    variables: () => ({
-      serverDtm: configPage("Behavior > Trigger"),
+    variables: (locale) => ({
+      serverDtm: configPage(locale, "commands.help.breadcrumbs.behavior.trigger"),
       personalDtm: mention("personal", "config"),
       respondCommand: mention("respond"),
     }),
@@ -558,11 +558,11 @@ const behaviorPages: readonly HelpPageDefinition[] = [
       },
     ],
     footerKey: "commands.help.deliberate-tool-mode.footer",
-    variables: () => ({
-      serverDtm: configPage("Behavior > Experimental"),
+    variables: (locale) => ({
+      serverDtm: configPage(locale, "commands.help.breadcrumbs.behavior.experimental"),
       personalDtm: mention("personal", "config"),
-      triggerCommand: configPage("Behavior > Experimental"),
-      thoughtLogs: configPage("Channels > Destinations"),
+      triggerCommand: configPage(locale, "commands.help.breadcrumbs.behavior.experimental"),
+      thoughtLogs: configPage(locale, "commands.help.breadcrumbs.channels.destinations"),
     }),
   },
   {
@@ -615,9 +615,9 @@ const integrationPages: readonly HelpPageDefinition[] = [
       { titleKey: "commands.help.mcp.security_title", bodyKey: "commands.help.mcp.security_description" },
     ],
     footerKey: "commands.help.mcp.footer",
-    variables: () => ({
-      mcpsCommand: configPage("Plugins > MCP Servers"),
-      configPlugins: configPage("Plugins > MCP Servers"),
+    variables: (locale) => ({
+      mcpsCommand: configPage(locale, "commands.help.breadcrumbs.plugins.mcp-servers"),
+      configPlugins: configPage(locale, "commands.help.breadcrumbs.plugins.mcp-servers"),
     }),
   },
   {
@@ -637,16 +637,16 @@ const integrationPages: readonly HelpPageDefinition[] = [
       },
     ],
     footerKey: "commands.help.st-preset.embed1_footer",
-    variables: () => ({
-      stPresets: configPage("Plugins > SillyTavern Presets"),
-      stPresetImport: configPage("Plugins > SillyTavern Presets"),
-      stPresetToggle: configPage("Plugins > SillyTavern Presets"),
-      stPresetRemove: configPage("Plugins > SillyTavern Presets"),
-      configSystemPromptSet: configPage("Behavior > General"),
-      personaPromptSet: configPage("Persona > Advanced"),
-      personaAttributeAdd: configPage("Persona > General"),
-      personaSampleDialogueAdd: configPage("Persona > General"),
-      configPlugins: configPage("Plugins > SillyTavern Presets"),
+    variables: (locale) => ({
+      stPresets: configPage(locale, "commands.help.breadcrumbs.plugins.sillytavern-presets"),
+      stPresetImport: configPage(locale, "commands.help.breadcrumbs.plugins.sillytavern-presets"),
+      stPresetToggle: configPage(locale, "commands.help.breadcrumbs.plugins.sillytavern-presets"),
+      stPresetRemove: configPage(locale, "commands.help.breadcrumbs.plugins.sillytavern-presets"),
+      configSystemPromptSet: configPage(locale, "commands.help.breadcrumbs.behavior.general"),
+      personaPromptSet: configPage(locale, "commands.help.breadcrumbs.persona.advanced"),
+      personaAttributeAdd: configPage(locale, "commands.help.breadcrumbs.persona.general"),
+      personaSampleDialogueAdd: configPage(locale, "commands.help.breadcrumbs.persona.general"),
+      configPlugins: configPage(locale, "commands.help.breadcrumbs.plugins.sillytavern-presets"),
     }),
   },
 ] as const;

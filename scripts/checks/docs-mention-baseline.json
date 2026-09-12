@@ -2,10 +2,6 @@
   "_notes": "Stale command mentions in documentation that are owed a fix. If a baselined path no longer occurs anywhere, the gate fails and demands its removal.",
   "exceptions": [
     {
-      "path": "config api-key set",
-      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
-    },
-    {
       "path": "config cooldown",
       "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
     },

@@ -1,10 +1,7 @@
-import { beforeAll, describe, expect, it, spyOn } from "bun:test";
-import { MessageFlags, type Client, type Interaction } from "discord.js";
+import { describe, expect, it, spyOn } from "bun:test";
+import type { Client, Interaction } from "discord.js";
 import { dispatchGlobalInteraction, isGlobalRoutableInteraction } from "@/utils/discord/interactions/router";
 import type { GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
-import { initializeLocalizer, localizer } from "@/utils/text/localizer";
-
-beforeAll(async () => initializeLocalizer());
 
 function makeInteraction(
   kind: "button" | "string" | "channel" | "role" | "user" | "mentionable" | "modal" | "other",
@@ -29,7 +26,7 @@ describe("global interaction router predicate", () => {
 });
 
 describe("retired panel namespaces", () => {
-  it("replies to legacy MCP and ST preset controls", async () => {
+  it("leaves legacy MCP and ST preset controls unmatched without replying", async () => {
     for (const customId of ["mcps:v1:retry:en-US:none", "st-presets:v1:retry:en-US"]) {
       const interaction = {
         id: `retired-${customId}`,
@@ -43,16 +40,8 @@ describe("retired panel namespaces", () => {
       } as unknown as GlobalRoutableInteraction;
       const replySpy = spyOn(interaction, "reply");
 
-      await expect(dispatchGlobalInteraction({} as Client, interaction)).resolves.toBe(true);
-      expect(replySpy).toHaveBeenCalledTimes(1);
-      // Flags alone would pass against a map pointing at the wrong destination, so assert the
-      // rendered text carries the command that actually replaced both roots.
-      expect(replySpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          flags: MessageFlags.Ephemeral,
-          content: localizer("en-US", "general.errors.outdated_panel", { command: "/config" }),
-        }),
-      );
+      await expect(dispatchGlobalInteraction({} as Client, interaction)).resolves.toBe(false);
+      expect(replySpy).not.toHaveBeenCalled();
 
       replySpy.mockRestore();
     }

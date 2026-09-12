@@ -55,6 +55,33 @@
         description: `Choose a provider below to open its API key guide. Closing the guide returns you to this help panel.`,
       },
     },
+    breadcrumbs: {
+      persona: {
+        general: `Persona > Identity & Personality`,
+        memories: `Persona > Memories`,
+        advanced: `Persona > Advanced`,
+      },
+      behavior: {
+        general: `Behavior > General Behavior`,
+        trigger: `Behavior > Trigger Behavior`,
+        experimental: `Behavior > Experimental Behavior`,
+        notices: `Behavior > Notice Behavior`,
+        memory: `Behavior > Advanced Memory`,
+      },
+      channels: {
+        destinations: `Channels > Logs & Welcome`,
+        "auto-trigger": `Channels > Auto-Trigger`,
+        rules: `Channels > Channel Rules`,
+      },
+      plugins: {
+        "available-tools": `Plugins > Available Tools`,
+        "mcp-servers": `Plugins > MCP Servers`,
+        "sillytavern-presets": `Plugins > SillyTavern Presets`,
+      },
+      models: {
+        switch: `Models > Switch Models`,
+      },
+    },
     "personal-provider": {
       description: `Learn how personal providers work.`,
       title: `Personal Providers`,

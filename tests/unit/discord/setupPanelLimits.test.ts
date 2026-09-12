@@ -109,6 +109,19 @@ function getContainerComponents(payload: ReturnType<typeof buildSetupWizardPaylo
 }
 
 describe("setupPanel Components V2 layout and limits", () => {
+  it("renders exactly one Markdown heading marker for the wizard title", () => {
+    const payload = buildSetupWizardPayload({
+      draft: createDraft(),
+      locale: "en-US",
+      isHosted: false,
+      nonce: TEST_NONCE,
+    });
+
+    const [header] = extractAllText(payload);
+    expect(header).toStartWith("### Set Up TomoriBot\n");
+    expect(header).not.toContain("### ###");
+  });
+
   it("renders three requirements in production and exactly two in non-production", () => {
     const draft = createDraft();
 
@@ -294,6 +307,69 @@ describe("setupPanel Components V2 layout and limits", () => {
 
     const catalogOption = chosenSelect.options.find((o) => o.value === "catalog");
     expect(catalogOption?.default).toBe(true);
+  });
+
+  it("holds text and component budgets when catalog names reach their option-label maximum", () => {
+    // Discord caps a modal select option label at 100 characters and the panel truncates to that,
+    // but the catalog row itself is unbounded, so the longest name the panel can be handed is
+    // whatever the row holds. Fixtures that use a short "Lighthouse" name measure nothing here.
+    const maxPersonaName = "p".repeat(100);
+    const maxPromptName = "r".repeat(100);
+    const catalogs = {
+      personas: [{ id: 7, name: maxPersonaName, description: "d".repeat(100) }],
+      prompts: [{ name: maxPromptName, description: "s".repeat(100) }],
+      promptTexts: new Map([[maxPromptName, "You are Tomori."]]),
+    };
+
+    for (const context of ["guild", "dm"] as const) {
+      for (const isHosted of [true, false]) {
+        const payload = buildSetupWizardPayload({
+          draft: createDraft({
+            context,
+            requiresPolicies: isHosted,
+            policiesAccepted: isHosted,
+            providerAccess: {
+              mode: "custom-endpoint",
+              connection: {
+                label: "e".repeat(40),
+                apiStyle: "openai-compatible",
+                endpointUrl: "https://example.invalid/v1",
+                encryptedAuthToken: Buffer.from(SECRET_KEY_STRING),
+                keyVersion: 1,
+              },
+              textModel: { modelCode: "m".repeat(200), numCtx: 131072, capabilities: ["tools", "vision"] },
+            },
+            startingSettings: {
+              presetId: 7,
+              humanizer: 3,
+              timezoneOffset: -12,
+              systemPrompt: { kind: "preset", presetName: maxPromptName },
+            },
+          }),
+          locale: "en-US",
+          isHosted,
+          nonce: TEST_NONCE,
+          settingsCatalogs: catalogs,
+        });
+
+        const validation = validateComponentsV2MessageLimits(payload);
+        expect(`${context}/${isHosted}: ${JSON.stringify(validation.violations)}`).toBe(`${context}/${isHosted}: []`);
+      }
+    }
+
+    const receipt = buildSetupSuccessPayload({
+      locale: "en-US",
+      context: "guild",
+      providerAccess: { mode: "user-byok" },
+      modelName: null,
+      providerLabel: "",
+      personaName: maxPersonaName,
+      notes: [],
+      learnMore: localizer("en-US", "commands.setup.wizard.receipt_learn_more", { help: "`/help`" }),
+    });
+
+    expect(validateComponentsV2MessageLimits(receipt).valid).toBe(true);
+    expect(JSON.stringify(receipt)).not.toContain(maxPersonaName);
   });
 
   it("holds text and component budgets under maximum-length fixtures", () => {

@@ -93,6 +93,36 @@ Multi-step modal continuations and collection-derived operations (such as person
 
 Do not move existing collectors to the global path merely because the registry exists. Use global routing only when the message is intended to outlive a bounded command session and every interaction can reconstruct its state from the custom ID plus durable data. Continue to use the anchor workflow for multi-step writes, validation, permissions, and cache invalidation that belong to one command session.
 
+### The `/setup` wizard
+
+`/setup` is the largest consumer of the global route path. `src/utils/discord/interactions/setupRoutes.ts`
+registers the `setup:v1` namespace and `src/utils/discord/ui/setupPanel.ts` builds every panel and modal
+from the same draft, so each control and every modal submission arrives as its own `interactionCreate`
+rather than through a collector.
+
+- The custom ID carries only the action, the locale, and an opaque nonce. The nonce resolves a bounded
+  process-local draft (`setupDraftStore.ts`) bound to the actor, the workspace, and the guild-or-DM
+  context, so the panel outlives the command invocation but not the process. `SETUP_DRAFT_TTL_MINUTES`
+  and `SETUP_DRAFT_MAX_ENTRIES` bound that life, and opening, editing, cancelling, expiring, or
+  restarting the process writes nothing.
+- Every routed action rechecks the owner, the workspace, the context, `Manage Server`, the step set the
+  environment renders, and the draft's expiry before it acts. A stale or forged nonce answers with the
+  terminal expired payload instead of repainting.
+- The step set is captured in the draft, so a draft created under one environment cannot complete a step
+  the other environment renders.
+- `Finish Setup` acknowledges the interaction before it claims the draft, because the claim, the catalog
+  and authorization revalidation, the transaction, the cache invalidation, a guild expression sync, and
+  a Discord REST avatar call all follow it.
+- A claimed draft is frozen: reads report `in-flight` and writes are refused until the commit releases or
+  consumes the claim, so a repeated press cannot run setup twice and a concurrent Cancel cannot zero the
+  credential being committed.
+- The receipt repaints the wizard's own ephemeral message as Components V2 text displays, because a
+  classic embed cannot be edited onto a Components V2 message.
+
+The wizard writes only on the final commit: no step control creates a provider, credential, or
+preference row, and the workspace's orphan recovery moved into the same transaction that creates the
+replacement rows.
+
 ## Webhook Helper Layout
 
 Command, event, tool, and stream code import webhook helpers from responsibility-owned modules:
@@ -167,37 +197,52 @@ handler.
 
 ## Current Top-Level Categories
 
-- `bot`
-- `capabilities`
+- `comment`
+- `compact`
 - `conditioning`
 - `config`
 - `contribute`
 - `donate`
+- `export`
+- `expressions`
 - `generate`
 - `help`
+- `impersonate`
+- `import`
+- `kill`
+- `learn`
 - `legal`
-- `memory`
+- `matrix`
+- `memories`
 - `model`
+- `moderation`
 - `novelai`
 - `nsfw`
-- `openrouter`
-- `optional-key`
+- `nuke`
 - `persona`
 - `personal`
-- `provider`
+- `ping`
+- `providers`
+- `punish`
+- `quota`
+- `refresh`
+- `reset`
+- `respond`
+- `reward`
 - `scheduled-task`
-- `server`
-- `speech`
+- `setup`
 - `stats`
+- `status`
 - `support`
 - `tool`
+- `update`
 
 ## Category Restrictions
 
 Defined in `commandLoader.ts`:
 
-- Guild-only categories: `server`, `conditioning`, `stats`
-- Manage Guild required by default: `config`, `server`
+- Guild-only categories: `conditioning`, `expressions`, `impersonate`, `matrix`, `moderation`, `nuke`, `punish`, `quota`, `reward`, `stats`
+- Manage Server required by default: `expressions`, `matrix`, `model`, `moderation`, `nsfw`, `nuke`, `providers`, `quota`, `setup`
 
 ## Localization Strategy for Command Metadata
 

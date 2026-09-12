@@ -28,7 +28,7 @@ const __probeMultiline = getCommandMention(
 
   it("does not find a mention call in a non-allowlisted file", () => {
     const source = `const path = mention("add");\n`;
-    const findings = findRuntimeMentions(source, "src/utils/discord/ui/anchorModelFlow.ts");
+    const findings = findRuntimeMentions(source, "src/utils/discord/ui/configPanel.ts");
     expect(findings).toEqual([]);
   });
 

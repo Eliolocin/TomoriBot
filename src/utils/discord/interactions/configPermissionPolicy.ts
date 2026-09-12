@@ -289,7 +289,6 @@ const PERSONA_GENERAL_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"]
   "avatar-submit": "avatar",
   "rename-open": "rename",
   "rename-submit": "rename",
-  "naming-style-select": "naming",
   "naming-open": "naming",
   "naming-submit": "naming",
   "trigger-add-open": "trigger-add",
