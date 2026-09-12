@@ -1,6 +1,6 @@
 # TomoriBot Reference TTS Servers
 
-These scripts are optional local wrapper servers for Phase 4 speech endpoints. They expose TomoriBot's `POST /synthesize` contract and keep model weights outside the Bun app.
+These scripts are optional local wrapper servers for TomoriBot speech endpoints. They expose TomoriBot's `POST /synthesize` contract and keep model weights outside the Bun app.
 
 Each engine lives in its own subfolder with its own `.venv` to keep dependencies isolated:
 
@@ -10,54 +10,52 @@ Each engine lives in its own subfolder with its own `.venv` to keep dependencies
 | Qwen3-TTS 12Hz 1.7B Base / VoiceDesign auto mode (10 languages, plain text) | `qwen3tts/` | 8012 |
 | Irodori-TTS v4.1 (Japanese, clone + VoiceDesign, emoji tags) | `irodoritts/` | 8013 |
 | Qwen3-TTS 12Hz 1.7B VoiceDesign (natural-language voice descriptions) | `qwen3tts/server.py --mode voice-design` | 8014 |
+| VoxCPM2 2B (30 languages, clone + VoiceDesign + controllable cloning) | `voxcpm2/` | 8016 |
+
+Port 8015 is intentionally left available for the Fish Audio S2 Pro sidecar proposed separately in PR #85.
 
 ## Prerequisites
 
-- **Python 3.10+**
-- **CUDA 12.x + drivers** *(optional)* — required for GPU acceleration; without it servers fall back to CPU (significantly slower)
+- **Python 3.10+**. VoxCPM2 currently requires Python 3.10-3.12.
+- **CUDA-capable NVIDIA GPU** *(optional)* for fast local synthesis. CPU fallbacks are significantly slower.
+- **ffmpeg** for TomoriBot voice-sample normalization.
 
-## Setup (Windows PowerShell)
+## Setup
 
-Run these commands from the repo root. Swap in the folder name for the engine you want.
+Each sidecar has its own setup guide under `docs/en/self-hosting/local-endpoints/text-to-speech/`. Modern sidecars include installer scripts where their upstream runtimes make that practical.
+
+For VoxCPM2:
 
 ```powershell
-# 1. Create and activate a virtual environment inside the engine folder
-python -m venv servers\tts\chatterbox\.venv
-servers\tts\chatterbox\.venv\Scripts\Activate.ps1
-
-# 2. Upgrade pip
-python -m pip install -U pip
-
-# 3. Install dependencies
-#    Chatterbox: install numpy first (pkuseg build-time dependency)
-python -m pip install numpy
-python -m pip install -r servers\tts\chatterbox\requirements.txt
-
-# 4. (GPU only) Reinstall PyTorch with CUDA support — skip for CPU-only installs
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
-
-# 5. Start the server
-python servers\tts\chatterbox\server.py
+# Windows PowerShell
+.\servers\tts\voxcpm2\install-voxcpm2.ps1
 ```
 
-> **CUDA version**: use `cu118` or `cu121` in the index URL above if your driver targets an older toolkit.
+```bash
+# Linux / WSL
+bash servers/tts/voxcpm2/install-voxcpm2.sh
+```
 
-Qwen3-TTS follows a similar venv + requirements flow. Irodori-TTS uses `uv` and backend extras instead; see `docs/en/self-hosting/local-endpoints/text-to-speech/irodoritts.md` for its current setup.
+After setup, start it directly or use the launcher:
+
+```sh
+bun run launch --voxcpm2
+```
 
 ## Registering in TomoriBot
 
-After the server is running, register it with `/provider custom-endpoint add`:
+Run `/providers`, choose **Add New Custom Endpoint**, and register the server as a Speech endpoint using API Compatibility `tts-clone`. Use the endpoint URL and voice-source mode documented for that engine.
 
-- `capability = speech`
-- `api_style = tts-clone`
-- `endpoint_url = http://127.0.0.1:<port>`
-- `script_markup` — select the correct option for the engine
+Then use `/providers` to add the Speech model, and `/config` > Models > Switch Models to activate it.
 
-> **ffmpeg required**: voice sample uploads are normalised to WAV via ffmpeg. Install it
-> and ensure `ffmpeg` is on your PATH before adding a sample in `/config` under Models > TTS Parameters & Voices.
+For voice samples, open `/config` under Models > TTS Parameters & Voices. TomoriBot normalizes uploaded samples to WAV with ffmpeg. Assign clone samples or VoiceDesign prompts to personas under `/config` > Persona > Voice.
+
+## Engine notes
 
 Chatterbox defaults to Turbo. Use `/config` under Models > TTS Parameters & Voices to disable Turbo and set standard-model `cfg_weight` and `exaggeration` values for generated voice messages.
 
-Qwen3-TTS defaults to auto mode. One server URL can handle both clone and VoiceDesign requests: the server detects clone requests by `ref_audio`, detects VoiceDesign requests by `instruct`, and swaps the loaded model when needed. Start VoiceDesign only with `TOMORI_TTS_MODE=voice-design python servers/tts/qwen3tts/server.py` or `python servers/tts/qwen3tts/server.py --mode voice-design`. In TomoriBot, set persona prompts with `/speech voice-design set`; generated tool calls send that prompt as `instruct`.
+Qwen3-TTS defaults to auto mode. One server URL can handle both clone and VoiceDesign requests: the server detects clone requests by `ref_audio`, detects VoiceDesign requests by `instruct`, and swaps the loaded model when needed. Start VoiceDesign only with `TOMORI_TTS_MODE=voice-design python servers/tts/qwen3tts/server.py` or `python servers/tts/qwen3tts/server.py --mode voice-design`.
 
 Irodori-TTS v4.1 also supports TomoriBot's `Auto` voice source mode from one endpoint. Clone requests use `ref_audio`; VoiceDesign requests use `instruct`, which the wrapper maps to Irodori caption conditioning.
+
+VoxCPM2 uses one official `openbmb/VoxCPM2` model for all modes. Reference audio maps to normal cloning, reference audio plus its stored transcript maps to Ultimate Cloning, and `instruct` is converted into VoxCPM2's natural-language Voice Design / controllable-cloning prefix. Use Voice Source Mode `Auto` and Script Markup `Plain`.
