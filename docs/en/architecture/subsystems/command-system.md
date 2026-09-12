@@ -106,10 +106,30 @@ the tone, the namespace parsed from the interaction's custom ID, and a `reason` 
 per-namespace `repaint` helpers pass their receipt through, so a panel that repaints as failed is
 countable in production without each of the roughly 149 receipt literals opting in.
 
+The failure goes to both sinks with the same fields: `log.metric` for the host JSONL that survives a
+container recreate, and `metricSampleRepository.recordSample("panel_failure", fields)` for the
+Postgres row Grafana can graph. The database write is fire-and-forget and never awaited, because it
+can ride a prune on the write path and this runs before the Discord request; awaiting it would put a
+round trip in front of every failure repaint. The sink resolves lazily through
+`setPanelFailureSampleSink`, so importing `interactionCore` never drags the database client into a
+caller that only wants to deliver a panel, and tests can deliver without a live pool.
+
 The receipt travels beside the payload rather than inside it. Embedding a marker in the rendered
 content would spend the payload's Discord text budget and could push a receipt line past the panel
 prose width limit; passing it as an option keeps the outgoing payload byte-for-byte what the caller
 built.
+
+That makes the failure rows joinable against successes, which live in `stat_counters` as
+`panel_action`. A query joining `stat_counters.metric_key` to `metric_samples.fields->>'reason'`
+answers which controls fail and how often relative to succeeding, without correlating two log streams
+by hand.
+
+Successes have their own blind spot, closed the same way. `recordPanelActionStat` buffers its counter
+write and cannot observe a later flush failure, so a dead success counter would leave failures
+looking like the whole story. When the write path itself raises it reports `panel_action_failure`
+once per outage rather than once per action, and re-arms after the next write that reaches the
+recorder. That report is a metric, not `log.warn` (dropped by production's level pin) and not
+`log.error` (which would attempt an `error_logs` insert down the same pool that just failed).
 
 **`deliverGuardedPanel` is the only emitter of `panel_failure`.** A route that counts a failure
 itself and then repaints with a receipt would count the same failure twice, under two reason keys,

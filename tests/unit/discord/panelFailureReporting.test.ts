@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { ComponentType, MessageFlags } from "discord.js";
 import type { PanelReceipt } from "@/types/discord/panel";
-import { deliverGuardedPanel } from "@/utils/discord/ui/interactionCore";
+import { deliverGuardedPanel, setPanelFailureSampleSink } from "@/utils/discord/ui/interactionCore";
 import { setupNoticeReceipt } from "@/utils/discord/ui/setupPanel";
 import { log } from "@/utils/misc/logger";
 import { initializeLocalizer } from "@/utils/text/localizer";
@@ -179,6 +179,140 @@ describe("panel failure reporting chokepoint", () => {
       expect(delivered).toBe(true);
     } finally {
       Object.assign(log, { metric: original });
+    }
+  });
+});
+
+describe("panel failure Postgres sink", () => {
+  /** Lets the unawaited sample write run, without depending on its internal microtask depth. */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("records the same fields the log metric carries, so the two sinks join on reason", async () => {
+    const { metrics, restore } = captureMetrics();
+    const samples: Array<{ name: string; fields: Record<string, number | string> }> = [];
+    const previous = setPanelFailureSampleSink({
+      recordSample: async (name, fields) => {
+        samples.push({ name, fields });
+      },
+    });
+    try {
+      await deliverGuardedPanel(fakeInteraction("moderation:v1:page:en-US"), validPayload(), {
+        locale: "en-US",
+        receipt: { tone: "error", heading: "Update Failed", detail: "Try again.", reason: "quota_edit_failed" },
+      });
+      await settle();
+
+      expect(samples).toHaveLength(1);
+      expect(samples[0]?.name).toBe("panel_failure");
+      expect(samples[0]?.fields).toEqual(metrics[0]?.fields);
+      expect(samples[0]?.fields.reason).toBe("quota_edit_failed");
+      expect(samples[0]?.fields.namespace).toBe("moderation");
+      expect(samples[0]?.fields.tone).toBe("error");
+    } finally {
+      setPanelFailureSampleSink(previous);
+      restore();
+    }
+  });
+
+  it("passes fields as an object rather than a stringified value", async () => {
+    const { restore } = captureMetrics();
+    let captured: unknown = null;
+    const previous = setPanelFailureSampleSink({
+      recordSample: async (_name, fields) => {
+        captured = fields;
+      },
+    });
+    try {
+      await deliverGuardedPanel(fakeInteraction("config:v1:page:en-US"), validPayload(), {
+        locale: "en-US",
+        receipt: ERROR_RECEIPT,
+      });
+      await settle();
+
+      // A stringified value binds as text and ::jsonb makes it a scalar string, which nulls every
+      // fields->>'...' read in Grafana. See migration 064.
+      expect(typeof captured).toBe("object");
+      expect(typeof captured).not.toBe("string");
+    } finally {
+      setPanelFailureSampleSink(previous);
+      restore();
+    }
+  });
+
+  it("stays silent for a success receipt", async () => {
+    const { restore } = captureMetrics();
+    const samples: string[] = [];
+    const previous = setPanelFailureSampleSink({
+      recordSample: async (name) => {
+        samples.push(name);
+      },
+    });
+    try {
+      await deliverGuardedPanel(fakeInteraction("config:v1:page:en-US"), validPayload(), {
+        locale: "en-US",
+        receipt: SUCCESS_RECEIPT,
+      });
+      await settle();
+      expect(samples).toHaveLength(0);
+    } finally {
+      setPanelFailureSampleSink(previous);
+      restore();
+    }
+  });
+
+  it("still delivers the panel when the sink rejects", async () => {
+    const { restore } = captureMetrics();
+    const previous = setPanelFailureSampleSink({
+      recordSample: async () => {
+        throw new Error("pool retired");
+      },
+    });
+    try {
+      let delivered = false;
+      await deliverGuardedPanel(
+        {
+          customId: "config:v1:page:en-US",
+          editReply: async () => {
+            delivered = true;
+            return undefined;
+          },
+        },
+        validPayload(),
+        { locale: "en-US", receipt: ERROR_RECEIPT },
+      );
+      await settle();
+      expect(delivered).toBe(true);
+    } finally {
+      setPanelFailureSampleSink(previous);
+      restore();
+    }
+  });
+
+  it("still delivers the panel when the sink throws synchronously", async () => {
+    const { restore } = captureMetrics();
+    const previous = setPanelFailureSampleSink({
+      recordSample: () => {
+        throw new Error("sink exploded before returning a promise");
+      },
+    });
+    try {
+      let delivered = false;
+      await deliverGuardedPanel(
+        {
+          customId: "config:v1:page:en-US",
+          editReply: async () => {
+            delivered = true;
+            return undefined;
+          },
+        },
+        validPayload(),
+        { locale: "en-US", receipt: ERROR_RECEIPT },
+      );
+      await settle();
+      expect(delivered).toBe(true);
+    } finally {
+      setPanelFailureSampleSink(previous);
+      restore();
     }
   });
 });

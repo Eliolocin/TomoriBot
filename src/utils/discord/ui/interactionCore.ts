@@ -2071,6 +2071,63 @@ export function validateAndFallbackPanelPayload<T>(payload: T, locale = "en-US")
 }
 
 /**
+ * Sink for the `panel_failure` series, injected so this module stays usable without a pool.
+ *
+ * Deliberately not a top-level import of the repository singleton. `interactionCore` is pulled in
+ * by nearly every Discord surface, and a static import would drag the database client into every
+ * one of them, including tests that only want to deliver a panel. The default resolves lazily and
+ * only when a failure actually happens.
+ */
+export interface PanelFailureSampleSink {
+  recordSample(metricName: string, fields: Record<string, number | string>): Promise<void>;
+}
+
+let panelFailureSampleSink: PanelFailureSampleSink | null = null;
+
+/**
+ * Overrides the sample sink, returning the previous one for the caller to restore.
+ *
+ * Mirrors the dependency-object shape `recordPanelActionStat` takes, in the form a module-private
+ * reporter can use: tests install a spy, and production never calls it.
+ */
+export function setPanelFailureSampleSink(sink: PanelFailureSampleSink | null): PanelFailureSampleSink | null {
+  const previous = panelFailureSampleSink;
+  panelFailureSampleSink = sink;
+  return previous;
+}
+
+async function resolvePanelFailureSampleSink(): Promise<PanelFailureSampleSink> {
+  if (panelFailureSampleSink) return panelFailureSampleSink;
+  const { metricSampleRepository } = await import("@/utils/db/repositories/MetricSampleRepository");
+  return metricSampleRepository;
+}
+
+/**
+ * Writes the failure to Postgres alongside the log stream, without awaiting it.
+ *
+ * `recordSample` already never throws and never rejects, so a failing pool cannot break delivery.
+ * It is still fire-and-forget rather than awaited because it performs an INSERT and can ride a
+ * prune on the write path, and this call happens before the Discord request. Awaiting it would put
+ * a database round trip in front of every failure repaint, which is the one thing the chokepoint's
+ * contract forbids.
+ *
+ * The fields are passed as an object, never a `JSON.stringify` result: under Bun's driver a
+ * stringified value binds as text and `::jsonb` turns it into a scalar string, which makes every
+ * `fields->>'...'` read in Grafana return null. See migration 064 and `recordSample`'s own note.
+ */
+function recordPanelFailureSample(fields: Record<string, number | string>): void {
+  void (async () => {
+    try {
+      const sink = await resolvePanelFailureSampleSink();
+      await sink.recordSample("panel_failure", fields);
+    } catch {
+      // A sink that cannot be resolved or reached is already reported by the repository's own
+      // once-per-outage warning; repeating it here would add a line per failure.
+    }
+  })();
+}
+
+/**
  * Single reporting point for every panel that repaints itself as a failed or warning receipt.
  *
  * Route code reports an expected refusal by returning a status object rather than throwing, so the
@@ -2084,6 +2141,10 @@ export function validateAndFallbackPanelPayload<T>(payload: T, locale = "en-US")
  * expected outcomes the actor can correct (bad input, stale panel, unavailable read), and writing
  * every one of them at error level is the storm the repository's circuit breaker exists to absorb.
  * The genuinely broken paths log at error level where their cause is still in scope.
+ *
+ * Both sinks carry the same fields, so `stat_counters.panel_action` (successes) and
+ * `metric_samples.panel_failure` (failures) join on `metric_key` / `fields->>'reason'` and answer
+ * which controls fail and how often relative to succeeding, in one query.
  */
 function reportPanelFailure(
   target: GuardedPanelDeliveryTarget | ((payload: unknown) => Promise<unknown>),
@@ -2099,7 +2160,7 @@ function reportPanelFailure(
     // back rather than guessing. Queries should still group on namespace + tone, and a call site
     // that knows its cause sets `receipt.reason` for an exact key.
     const namespace = typeof customId === "string" ? (customId.split(":")[0] ?? "unknown") : "unknown";
-    log.metric("panel_failure", {
+    const fields = {
       locale: options?.locale ?? "en-US",
       tone: receipt.tone,
       // Deliberately not the heading as the grouping key: a localized heading files the same defect
@@ -2107,7 +2168,9 @@ function reportPanelFailure(
       reason: receipt.reason ?? `${namespace}_${receipt.tone}`,
       namespace,
       heading: receipt.heading,
-    });
+    };
+    log.metric("panel_failure", fields);
+    recordPanelFailureSample(fields);
   } catch {
     // Diagnostics must never be able to break the delivery they describe.
   }

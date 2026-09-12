@@ -32,6 +32,43 @@ const defaultDependencies: PanelActionMetricsDependencies = {
 };
 
 /**
+ * Suppresses repeat reports so a pool-wide failure reports once, not once per panel action.
+ *
+ * Mirrors `MetricSampleRepository.warnOnce`, including the reset on the next write that gets far
+ * enough to be recorded: a second outage after a recovery is worth knowing about.
+ */
+let hasReportedSinceSuccess = false;
+
+/**
+ * Reports a failed `panel_action` write, once per outage.
+ *
+ * `log.metric`, not `log.warn`: production pins pino at level `error`, so the warn this replaces
+ * was dropped before either sink and a silently dead success counter left no trace anywhere. Not
+ * `log.error` either, which would attempt an `error_logs` insert down the same pool that just
+ * failed, adding load to the incident it reports.
+ */
+function reportPanelActionFailure(action: PanelAction, error: unknown): void {
+  if (hasReportedSinceSuccess) return;
+  hasReportedSinceSuccess = true;
+
+  log.metric("panel_action_failure", {
+    reason: "panel_action_stat_write_failed",
+    action,
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
+
+/**
+ * Clears the suppression latch, for tests that need a known starting state.
+ *
+ * The latch is module-level because it tracks an outage rather than a call. Exposed rather than
+ * reset by re-importing the module, which `mock.module` cannot undo cleanly for the whole run.
+ */
+export function resetPanelActionFailureReporting(): void {
+  hasReportedSinceSuccess = false;
+}
+
+/**
  * Records one `panel_action` counter after a semantic panel operation succeeds.
  *
  * Never rejects: telemetry writes must never throw or delay the response path.
@@ -48,6 +85,9 @@ export async function recordPanelActionStat(
     const userRow = await deps.loadUserRow(input.userDiscId);
     if (!userRow?.user_id) return;
 
+    // Cleared before the write, because `record` returns void and a buffered counter cannot report
+    // its own later failure. The next action that reaches this point re-arms reporting.
+    hasReportedSinceSuccess = false;
     deps.record({
       serverId: input.serverId,
       userId: userRow.user_id,
@@ -55,6 +95,6 @@ export async function recordPanelActionStat(
       metricKey: input.action,
     });
   } catch (error) {
-    log.warn(`Failed to record panel_action stat for ${input.action}`, error);
+    reportPanelActionFailure(input.action, error);
   }
 }
