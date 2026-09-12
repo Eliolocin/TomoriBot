@@ -98,7 +98,7 @@ function makeEndpoint(options: {
     extra_config: {
       ...(options.voiceMode ? { voice_mode: options.voiceMode } : {}),
       ...(options.scriptMarkup ? { script_markup: options.scriptMarkup } : {}),
-      ...(options.supportsInstruct ? { supports_instruct: true } : {}),
+      ...(options.supportsInstruct !== undefined ? { supports_instruct: options.supportsInstruct } : {}),
     },
   } as unknown as CustomEndpointRow;
 }
@@ -220,15 +220,24 @@ describe("synthesizeVoiceMessage clone sources", () => {
     expect(cloneRequests[0]).toMatchObject({ refText: "reference words" });
   });
 
-  it("forwards delivery direction to an instruct-capable clone adapter", async () => {
-    await dispatch(makeEndpoint({ voiceMode: "clone", supportsInstruct: true }), CLONE_SOURCE, {
-      voiceInstructions: "speak softly and slowly",
+  it("forwards clone delivery direction to the clone adapter", async () => {
+    const { calls } = await dispatch(makeEndpoint({ voiceMode: "clone", supportsInstruct: true }), CLONE_SOURCE, {
+      voiceInstructions: "sound calm and close",
     });
 
-    expect(cloneRequests[0]).toMatchObject({
-      voiceSampleId: 12,
-      instruct: "speak softly and slowly",
-    });
+    expect(calls).toEqual(["clone"]);
+    expect(cloneRequests[0]).toMatchObject({ voiceInstructions: "sound calm and close" });
+  });
+
+  it("forwards clone delivery direction for ad-hoc uploads", async () => {
+    const { calls } = await dispatch(
+      makeEndpoint({ voiceMode: "clone", supportsInstruct: true }),
+      CLONE_BUFFER_SOURCE,
+      { voiceInstructions: "speak softly" },
+    );
+
+    expect(calls).toEqual(["clone-buffer"]);
+    expect(cloneRequests[0]).toMatchObject({ voiceInstructions: "speak softly" });
   });
 
   it("refuses a clone source on a voice-design-only endpoint without reaching a backend", async () => {
@@ -302,6 +311,7 @@ describe("design-shape capability", () => {
       expect(resolveVoiceSourceCapabilities(endpoint)).toEqual({
         acceptsCloneShape: false,
         acceptsDesignShape: false,
+        cloneInstructionsAvailable: false,
       });
     }
   });

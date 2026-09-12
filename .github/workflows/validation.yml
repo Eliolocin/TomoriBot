@@ -44,18 +44,38 @@ jobs:
         with:
           bun-version: 1.4.0
 
+      - name: Setup Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: "3.11"
+
       - name: Install PostgreSQL client tools
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Validate Python sidecar contracts and installer syntax
         shell: bash
         run: |
+          python -m pip install --disable-pip-version-check --quiet -r servers/tts/voxcpm2/requirements-test.txt
+          python -m py_compile servers/tts/voxcpm2/server.py servers/tts/voxcpm2/test_server.py
+          python -m unittest discover -s servers/tts/voxcpm2 -p 'test_*.py'
           python3 -m compileall -q servers/tts
           python3 -m unittest discover -s servers/tts/cosyvoice3 -p 'test_*.py'
-          bash -n servers/tts/cosyvoice3/install-cosyvoice3.sh
-          if command -v pwsh >/dev/null 2>&1; then
-            pwsh -NoProfile -Command '$errors = $null; [System.Management.Automation.Language.Parser]::ParseFile("servers/tts/cosyvoice3/install-cosyvoice3.ps1", [ref]$null, [ref]$errors) | Out-Null; if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }'
-          fi
+          while IFS= read -r installer; do bash -n "$installer"; done < <(find servers -type f -name 'install-*.sh' -print)
+
+      - name: Validate PowerShell installer syntax
+        shell: pwsh
+        run: |
+          $parseErrors = @()
+          Get-ChildItem -Path servers -Filter 'install-*.ps1' -Recurse | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            $parseErrors += $errors
+          }
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | Format-List | Out-String | Write-Error
+            exit 1
+          }
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -141,3 +161,20 @@ jobs:
         # runTests.ts detects POSTGRES_PASSWORD, provisions a disposable
         # tomoribot_test_<id> database, injects TEST_DB_READY=1, and drops
         # the database after the suite completes (or on failure).
+
+  validate-fish-sidecar:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install Fish sidecar test dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/fish-s2-test-venv"
+          "$RUNNER_TEMP/fish-s2-test-venv/bin/python" -m pip install --disable-pip-version-check -r servers/tts/fishs2/requirements.txt
+
+      - name: Compile Fish sidecar and run contract tests
+        working-directory: servers/tts/fishs2
+        run: |
+          "$RUNNER_TEMP/fish-s2-test-venv/bin/python" -m py_compile server.py test_server.py
+          "$RUNNER_TEMP/fish-s2-test-venv/bin/python" -m unittest discover -p 'test_*.py'

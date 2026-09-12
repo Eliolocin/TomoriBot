@@ -62,7 +62,7 @@ export interface VoiceMessageModalInput {
   scriptMarkup: string | undefined;
   /** Render the Delivery Direction field: some design-shaped source is available. */
   designShapeAvailable: boolean;
-  /** Render Delivery Direction for clone endpoints that accept one-off instructions. */
+  /** Render Delivery Direction for clone-shaped requests that support `instruct`. */
   cloneInstructionsAvailable: boolean;
   /** Render the Reference Transcript field: an uploaded clip will be cloned. */
   uploadShapeSelected: boolean;

@@ -88,10 +88,10 @@ export type VoiceScriptMarkup = keyof typeof VOICE_TOOL_VARIANTS;
 export function buildVoiceMessageToolVariant(
   tool: Tool,
   scriptMarkup: VoiceScriptMarkup,
-  cloneInstructionsAvailable = false,
+  options: { voiceInstructionsAvailable?: boolean } = {},
 ): Tool {
   const variant = VOICE_TOOL_VARIANTS[scriptMarkup] ?? VOICE_TOOL_VARIANTS["bracket-tags"];
-  const exposesVoiceInstructions = scriptMarkup === "voice-design" || cloneInstructionsAvailable;
+  const voiceInstructionsAvailable = options.voiceInstructionsAvailable ?? scriptMarkup === "voice-design";
   const parameters: ToolParameterSchema = {
     ...tool.parameters,
     properties: {
@@ -100,7 +100,7 @@ export function buildVoiceMessageToolVariant(
         ...tool.parameters.properties.script,
         description: variant.scriptDescription,
       },
-      ...(exposesVoiceInstructions
+      ...(voiceInstructionsAvailable
         ? {
             voice_instructions: {
               type: "string" as const,
@@ -111,13 +111,8 @@ export function buildVoiceMessageToolVariant(
     },
   };
 
-  const description =
-    cloneInstructionsAvailable && scriptMarkup !== "voice-design"
-      ? `${variant.toolDescription} You may optionally provide natural-language delivery direction in voice_instructions; it shapes this message only and is not spoken aloud.`
-      : variant.toolDescription;
-
   return createToolVariant(tool, {
-    description,
+    description: variant.toolDescription,
     parameters,
   });
 }
@@ -146,23 +141,25 @@ export class GenerateVoiceMessageTool extends BaseTool {
   async assembleForContext(context: ToolAssemblyContext): Promise<Tool | null> {
     const serverId = Number.parseInt(context.state.server_id, 10);
     const activeSpeechEndpoint = Number.isInteger(serverId) ? await resolveActiveSpeechEndpoint(serverId) : null;
-    const endpoint = activeSpeechEndpoint?.endpoint ?? null;
-    const scriptMarkup = (endpoint?.extra_config?.script_markup as string | undefined) ?? "bracket-tags";
+    const scriptMarkup =
+      (activeSpeechEndpoint?.endpoint.extra_config?.script_markup as string | undefined) ?? "bracket-tags";
     const voiceDesign = shouldUseVoiceDesignForPersona(
-      endpoint,
+      activeSpeechEndpoint?.endpoint,
       context.state.activePersonaVoiceDesignPrompt,
       context.state.activePersonaVoiceName,
     );
+    const cloneInstructionsAvailable = resolveVoiceSourceCapabilities(
+      activeSpeechEndpoint?.endpoint,
+    ).cloneInstructionsAvailable;
     const variant = voiceDesign
       ? "voice-design"
       : scriptMarkup in VOICE_TOOL_VARIANTS
         ? (scriptMarkup as VoiceScriptMarkup)
         : "bracket-tags";
-    const capabilities = resolveVoiceSourceCapabilities(endpoint);
-    const cloneInstructionsAvailable =
-      !voiceDesign && capabilities.acceptsCloneShape && Boolean(endpoint?.extra_config.supports_instruct);
 
-    return buildVoiceMessageToolVariant(this, variant, cloneInstructionsAvailable);
+    return buildVoiceMessageToolVariant(this, variant, {
+      voiceInstructionsAvailable: voiceDesign || cloneInstructionsAvailable,
+    });
   }
 
   private resolveThreadId(context: ToolContext): string | undefined {

@@ -43,7 +43,7 @@ function makeEndpoint(options: {
     extra_config: {
       ...(options.voiceMode ? { voice_mode: options.voiceMode } : {}),
       ...(options.scriptMarkup ? { script_markup: options.scriptMarkup } : {}),
-      ...(options.supportsInstruct ? { supports_instruct: true } : {}),
+      ...(options.supportsInstruct !== undefined ? { supports_instruct: options.supportsInstruct } : {}),
     },
   } as unknown as CustomEndpointRow;
 }
@@ -61,10 +61,9 @@ const NON_CHATTERBOX_CLONE = makeEndpoint({
   endpointUrl: "https://qwen.example.test",
 });
 
-const INSTRUCT_CLONE = makeEndpoint({
+const COSYVOICE3_INSTRUCTION_CLONE = makeEndpoint({
   voiceMode: "clone",
   label: "CosyVoice 3",
-  modelName: "Fun-CosyVoice3-0.5B-2512",
   supportsInstruct: true,
 });
 
@@ -100,8 +99,7 @@ function buildInput(options: {
     scriptMarkup: options.endpoint.extra_config.script_markup as string | undefined,
     designShapeAvailable:
       candidates.some((candidate) => candidate.shape === "design") || capabilities.acceptsDesignShape,
-    cloneInstructionsAvailable:
-      capabilities.acceptsCloneShape && Boolean(options.endpoint.extra_config.supports_instruct),
+    cloneInstructionsAvailable: capabilities.cloneInstructionsAvailable,
     uploadShapeSelected: defaultSource?.id === "upload",
     expressiveness: options.expressiveness,
     chatterboxDefaults: { cfgWeight: 0.5, exaggeration: 0.5 },
@@ -229,15 +227,13 @@ describe("buildVoiceMessageModalComponents", () => {
     expect(componentIds(input)).not.toContain(VOICE_MESSAGE_DIRECTION_INPUT_ID);
   });
 
-  it("renders delivery direction for a clone endpoint with clone instructions", () => {
+  it("renders delivery direction for an instruction-capable clone endpoint", () => {
     const input = buildInput({
-      endpoint: INSTRUCT_CLONE,
+      endpoint: COSYVOICE3_INSTRUCTION_CLONE,
       persona: { speech_voice_sample_id: 12 },
       expressiveness: null,
     });
 
-    expect(input.designShapeAvailable).toBe(false);
-    expect(input.cloneInstructionsAvailable).toBe(true);
     expect(componentIds(input)).toContain(VOICE_MESSAGE_DIRECTION_INPUT_ID);
   });
 });
