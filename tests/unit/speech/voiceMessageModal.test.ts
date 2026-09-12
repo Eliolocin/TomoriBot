@@ -61,9 +61,9 @@ const NON_CHATTERBOX_CLONE = makeEndpoint({
   endpointUrl: "https://qwen.example.test",
 });
 
-const INSTRUCTION_CLONE = makeEndpoint({
+const COSYVOICE3_INSTRUCTION_CLONE = makeEndpoint({
   voiceMode: "clone",
-  label: "VoxCPM2",
+  label: "CosyVoice 3",
   supportsInstruct: true,
 });
 
@@ -229,7 +229,7 @@ describe("buildVoiceMessageModalComponents", () => {
 
   it("renders delivery direction for an instruction-capable clone endpoint", () => {
     const input = buildInput({
-      endpoint: INSTRUCTION_CLONE,
+      endpoint: COSYVOICE3_INSTRUCTION_CLONE,
       persona: { speech_voice_sample_id: 12 },
       expressiveness: null,
     });

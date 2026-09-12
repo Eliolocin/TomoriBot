@@ -10,7 +10,7 @@ config();
 
 // scripts/devtools/launch.ts
 //
-//   bun run launch [--searxng] [--crawl4ai] [--qwen3tts] [--chatterbox] [--irodoritts] [--voxcpm2] [--fishs2]
+//   bun run launch [--searxng] [--crawl4ai] [--qwen3tts] [--chatterbox] [--irodoritts] [--voxcpm2] [--fishs2] [--cosyvoice3]
 //
 //   Starts requested sidecar services, waits for them to be ready, then
 //   launches the bot in watch mode (equivalent to `bun run dev`).
@@ -41,6 +41,7 @@ ${pc.bold("Options:")}
   --irodoritts  Start the IrodoriTTS Python server (requires venv setup)
   --voxcpm2     Start the VoxCPM2 Python server (requires venv setup)
   --fishs2      Start the Fish Audio S2 Pro Python server (requires venv + model setup)
+  --cosyvoice3  Start the CosyVoice 3 Python server (requires venv setup)
   --whisperx    Start the WhisperX transcription Python server (requires venv setup)
   --help        Show this message
 
@@ -50,6 +51,7 @@ ${pc.bold("Examples:")}
   bun run launch --qwen3tts --searxng
   bun run launch --voxcpm2
   bun run launch --fishs2
+  bun run launch --cosyvoice3
 `);
   process.exit(0);
 }
@@ -142,7 +144,7 @@ const SIDECARS: Record<string, SidecarDef> = {
     displayName: "Qwen3-TTS",
     venvRelPath: "servers/tts/qwen3tts/.venv",
     scriptRelPath: "servers/tts/qwen3tts/server.py",
-    healthUrl: `http://127.0.0.1:${process.env.TOMORI_TTS_PORT ?? "8012"}/health`,
+    healthUrl: `http://127.0.0.1:${process.env.TOMORI_TTS_PORT ?? (process.env.TOMORI_TTS_MODE === "voice-design" ? "8014" : "8012")}/health`,
     readyStatuses: ["ok", "idle"],
   },
 
@@ -182,6 +184,14 @@ const SIDECARS: Record<string, SidecarDef> = {
         ? { Authorization: `Bearer ${process.env.FISH_S2_API_KEY ?? process.env.TOMORI_TTS_API_KEY}` }
         : {}),
     },
+  },
+
+  cosyvoice3: {
+    kind: "python",
+    displayName: "CosyVoice 3",
+    venvRelPath: "servers/tts/cosyvoice3/.venv",
+    scriptRelPath: "servers/tts/cosyvoice3/server.py",
+    healthUrl: `http://127.0.0.1:${process.env.COSYVOICE3_PORT ?? process.env.TOMORI_TTS_PORT ?? "8017"}/health`,
   },
 
   whisperx: {

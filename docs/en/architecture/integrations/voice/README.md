@@ -85,6 +85,12 @@ Any invocation can see up to four candidate sources, gated by what the active en
 
 `resolveVoiceSourceCapabilities()` is the single implementation of that table, and both the modal and the synthesis dispatcher read it. The dispatcher refuses any source whose shape the endpoint does not accept, and it does so before reaching a backend, so a mismatch surfaces as a configuration error rather than as a request a TTS server has to reject.
 
+Delivery Direction is available in `/generate voice-message` when either a design-shaped source is
+available or the active clone endpoint advertises `supports_instruct`. The latter is tracked as
+`cloneInstructionsAvailable`, so a clone persona can use global delivery instructions without being
+misclassified as a VoiceDesign source. The LLM tool assembly uses the same capability check and
+forwards `voice_instructions` through the clone adapter only for endpoints that opt in.
+
 Two predicates in `ttsVoiceDesignAdapter.ts` are easy to confuse, and confusing them once already disabled voice design on every `auto` deployment:
 
 - `isVoiceDesignEndpoint()` is true only for a **dedicated** voice-design endpoint.
