@@ -183,7 +183,7 @@ Docker Compose builds and runs TomoriBot plus PostgreSQL. It does not use the se
 For Docker Compose, start from `.env.example`, then add `POSTGRES_PASSWORD` if you have not already set it. Optional Docker or runtime tuning values can still be copied from `.env.optional.example`.
 
 ```sh
-# Build and start TomoriBot plus PostgreSQL
+# Build and start TomoriBot and her database
 docker compose up --build
 ```
 
@@ -241,8 +241,8 @@ bun run update
 The command runs this sequence, stopping immediately if any step fails:
 
 1. **`bun run backup`** - takes a full database backup into `/backups/` *before* touching any code. If the backup fails, the update aborts with your deployment completely unchanged.
-2. **`git pull --rebase --autostash`**
-3. **`bun install --frozen-lockfile`**
+2. **`git pull --rebase --autostash`
+3. **`bun install --frozen-lockfile`
 
 Then restart TomoriBot with `bun run dev` or `bun run launch`
 
