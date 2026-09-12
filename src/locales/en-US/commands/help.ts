@@ -60,6 +60,8 @@
         general: `Persona > Identity & Personality`,
         memories: `Persona > Memories`,
         advanced: `Persona > Advanced`,
+        voice: `Persona > Voice`,
+        sprites: `Persona > Sprites`,
       },
       behavior: {
         general: `Behavior > General Behavior`,
@@ -72,6 +74,7 @@
         destinations: `Channels > Logs & Welcome`,
         "auto-trigger": `Channels > Auto-Trigger`,
         rules: `Channels > Channel Rules`,
+        overrides: `Channels > Channel Overrides`,
       },
       plugins: {
         "available-tools": `Plugins > Available Tools`,
@@ -80,6 +83,29 @@
       },
       models: {
         switch: `Models > Switch Models`,
+        voices: `Models > TTS Parameters & Voices`,
+        image: `Models > Image Generation Defaults`,
+        parameters: `Models > Text Samplers & Parameters`,
+      },
+      personal: {
+        profile: {
+          general: `Profile > General Preferences`,
+        },
+        privacy: {
+          controls: `Privacy > Privacy Controls`,
+        },
+        models: {
+          switch: `Models > Switch Models`,
+        },
+        advanced: {
+          spotlight: `Advanced > Personal Spotlight`,
+        },
+      },
+      moderation: {
+        "member-access": `Member Access`,
+        "user-blacklist": `User Blacklist`,
+        whitelist: `Whitelist`,
+        quotas: `Quotas`,
       },
     },
     "personal-provider": {

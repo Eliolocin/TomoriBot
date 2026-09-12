@@ -15,7 +15,7 @@ import { parseLocale } from "@/utils/discord/panelRouteTokens";
 export const MODERATION_ROUTE_NAMESPACE = "moderation";
 export const MODERATION_ROUTE_VERSION = "v1";
 
-const MODERATION_CATEGORIES = ["member-access", "user-blacklist", "whitelist", "quotas"] as const;
+export const MODERATION_CATEGORIES = ["member-access", "user-blacklist", "whitelist", "quotas"] as const;
 export type ModerationCategory = (typeof MODERATION_CATEGORIES)[number];
 
 const WHITELIST_PAGES = ["channels", "persona-channels", "roles"] as const;

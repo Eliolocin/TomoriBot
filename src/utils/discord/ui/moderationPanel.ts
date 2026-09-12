@@ -147,6 +147,13 @@ function renderModerationName(locale: string, value: string): string {
   return `${rendered}\n-# ${localizer(locale, footerKey, textPreviewFooterVars(preview))}`;
 }
 
+export const MODERATION_CATEGORY_LOCALE_KEYS: Record<ModerationCategory, string> = {
+  "member-access": "commands.moderation.category_member_access",
+  "user-blacklist": "commands.moderation.category_user_blacklist",
+  whitelist: "commands.moderation.category_whitelist",
+  quotas: "commands.moderation.category_quotas",
+};
+
 export function buildModerationPanelPayload(input: ModerationPanelRenderInput): ModerationPanelPayload {
   const { locale, category, whitelistPage, rangeIndex, data, receipt } = input;
 
@@ -154,22 +161,22 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
     [
       {
         id: "member-access",
-        label: localizer(locale, "commands.moderation.category_member_access"),
+        label: localizer(locale, MODERATION_CATEGORY_LOCALE_KEYS["member-access"]),
         customId: buildModerationRouteId({ action: "category", locale, category: "member-access" }),
       },
       {
         id: "user-blacklist",
-        label: localizer(locale, "commands.moderation.category_user_blacklist"),
+        label: localizer(locale, MODERATION_CATEGORY_LOCALE_KEYS["user-blacklist"]),
         customId: buildModerationRouteId({ action: "category", locale, category: "user-blacklist" }),
       },
       {
         id: "whitelist",
-        label: localizer(locale, "commands.moderation.category_whitelist"),
+        label: localizer(locale, MODERATION_CATEGORY_LOCALE_KEYS.whitelist),
         customId: buildModerationRouteId({ action: "category", locale, category: "whitelist" }),
       },
       {
         id: "quotas",
-        label: localizer(locale, "commands.moderation.category_quotas"),
+        label: localizer(locale, MODERATION_CATEGORY_LOCALE_KEYS.quotas),
         customId: buildModerationRouteId({ action: "category", locale, category: "quotas" }),
       },
     ],

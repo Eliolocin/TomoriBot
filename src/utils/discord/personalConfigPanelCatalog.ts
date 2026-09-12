@@ -19,12 +19,26 @@ export const PERSONAL_CONFIG_ROUTE_VERSION = "v2";
 
 export type PersonalConfigCategory = "profile" | "privacy" | "models" | "advanced";
 
+export const PERSONAL_CONFIG_CATEGORIES: readonly PersonalConfigCategory[] = [
+  "profile",
+  "privacy",
+  "models",
+  "advanced",
+];
+
 type ProfilePage = "general" | "persona" | "appearance";
 type PrivacyPage = "controls";
 type ModelsPage = "switch" | "parameters" | "fallbacks";
 type AdvancedPage = "response-modes" | "impersonation" | "spotlight";
 
 export type PersonalConfigPage = ProfilePage | PrivacyPage | ModelsPage | AdvancedPage;
+
+export const PERSONAL_CONFIG_PAGES_BY_CATEGORY: Record<PersonalConfigCategory, readonly PersonalConfigPage[]> = {
+  profile: ["general", "persona", "appearance"],
+  privacy: ["controls"],
+  models: ["switch", "parameters", "fallbacks"],
+  advanced: ["response-modes", "impersonation", "spotlight"],
+};
 
 export const DEFAULT_PAGE_FOR_CATEGORY: Record<PersonalConfigCategory, PersonalConfigPage> = {
   profile: "general",
@@ -425,30 +439,12 @@ export type PersonalConfigRouteCodecs = {
 };
 
 function parseCategory(value: string | undefined): PersonalConfigCategory | null {
-  if (value === "profile" || value === "privacy" || value === "models" || value === "advanced") {
-    return value;
-  }
-  return null;
+  return PERSONAL_CONFIG_CATEGORIES.find((candidate) => candidate === value) ?? null;
 }
 
 function parsePage(category: PersonalConfigCategory, value: string | undefined): PersonalConfigPage | null {
   if (!value) return null;
-  switch (category) {
-    case "profile":
-      if (value === "general" || value === "persona" || value === "appearance") return value;
-      return null;
-    case "privacy":
-      if (value === "controls") return value;
-      return null;
-    case "models":
-      if (value === "switch" || value === "parameters" || value === "fallbacks") return value;
-      return null;
-    case "advanced":
-      if (value === "response-modes" || value === "impersonation" || value === "spotlight") return value;
-      return null;
-    default:
-      return null;
-  }
+  return PERSONAL_CONFIG_PAGES_BY_CATEGORY[category].find((candidate) => candidate === value) ?? null;
 }
 
 function parseManagedCapability(value: string | undefined): PersonalConfigManagedCapability | null {

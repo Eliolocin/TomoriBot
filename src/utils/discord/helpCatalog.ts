@@ -80,13 +80,37 @@ function mention(command: string, subcommandOrGroup?: string, subcommand?: strin
   return commandRegistry.getCommandMention(command, subcommandOrGroup, subcommand);
 }
 
+type BreadcrumbRoot = "config" | "personal" | "moderation";
+
+function renderBreadcrumbRoot(root: BreadcrumbRoot, locale: string, breadcrumbKey: string): string {
+  const rootMention =
+    root === "config"
+      ? commandRegistry.getCommandMention("config", undefined, undefined, true)
+      : root === "personal"
+        ? commandRegistry.getCommandMention("personal", "config", undefined, true)
+        : commandRegistry.getCommandMention("moderation", undefined, undefined, true);
+  return `${rootMention} > ${localizer(locale, breadcrumbKey)}`;
+}
+
+export function breadcrumbPage(root: BreadcrumbRoot, locale: string, breadcrumbKey: string): string {
+  return renderBreadcrumbRoot(root, locale, breadcrumbKey);
+}
+
 /**
  * Every dissolved leaf now reaches its destination through the same bare `/config` mention, so a
  * sentence naming several of them would repeat an identical token with nothing to tell the pages
  * apart. The breadcrumb carries the distinction the subcommand name used to.
  */
-function configPage(locale: string, breadcrumbKey: string): string {
-  return `${commandRegistry.getCommandMention("config", undefined, undefined, true)} > ${localizer(locale, breadcrumbKey)}`;
+export function configPage(locale: string, breadcrumbKey: string): string {
+  return renderBreadcrumbRoot("config", locale, breadcrumbKey);
+}
+
+export function personalConfigPage(locale: string, breadcrumbKey: string): string {
+  return renderBreadcrumbRoot("personal", locale, breadcrumbKey);
+}
+
+export function moderationPage(locale: string, breadcrumbKey: string): string {
+  return renderBreadcrumbRoot("moderation", locale, breadcrumbKey);
 }
 
 const setupPages: readonly HelpPageDefinition[] = [

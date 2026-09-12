@@ -198,6 +198,34 @@ function buildPayload(components: ComponentInContainerData[], receipt?: PanelRec
   };
 }
 
+export const PERSONAL_CATEGORY_LOCALE_KEYS: Record<PersonalConfigCategory, string> = {
+  profile: "commands.personal.config.category_profile",
+  privacy: "commands.personal.config.category_privacy",
+  models: "commands.personal.config.category_models",
+  advanced: "commands.personal.config.category_advanced",
+};
+
+export const PERSONAL_PAGE_LOCALE_KEYS: Record<PersonalConfigCategory, Record<string, string>> = {
+  profile: {
+    general: "commands.personal.config.page_general",
+    persona: "commands.personal.config.page_persona",
+    appearance: "commands.personal.config.page_appearance",
+  },
+  privacy: {
+    controls: "commands.personal.config.page_privacy_controls",
+  },
+  models: {
+    switch: "commands.personal.config.page_switch_models",
+    parameters: "commands.personal.config.page_parameters",
+    fallbacks: "commands.personal.config.page_fallbacks",
+  },
+  advanced: {
+    "response-modes": "commands.personal.config.page_response_modes",
+    impersonation: "commands.personal.config.page_impersonation",
+    spotlight: "commands.personal.config.page_spotlight",
+  },
+};
+
 function getPageOptionsForCategory(
   locale: string,
   category: PersonalConfigCategory,
@@ -208,17 +236,17 @@ function getPageOptionsForCategory(
     case "profile":
       return [
         {
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.page_general"), 100),
+          label: safeSelectOptionText(localizer(locale, PERSONAL_PAGE_LOCALE_KEYS.profile.general), 100),
           value: "general",
           default: currentPage === "general",
         },
         {
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.page_persona"), 100),
+          label: safeSelectOptionText(localizer(locale, PERSONAL_PAGE_LOCALE_KEYS.profile.persona), 100),
           value: "persona",
           default: currentPage === "persona",
         },
         {
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.page_appearance"), 100),
+          label: safeSelectOptionText(localizer(locale, PERSONAL_PAGE_LOCALE_KEYS.profile.appearance), 100),
           value: "appearance",
           default: currentPage === "appearance",
         },
@@ -226,7 +254,7 @@ function getPageOptionsForCategory(
     case "privacy":
       return [
         {
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.page_privacy_controls"), 100),
+          label: safeSelectOptionText(localizer(locale, PERSONAL_PAGE_LOCALE_KEYS.privacy.controls), 100),
           value: "controls",
           default: currentPage === "controls",
         },
@@ -234,17 +262,17 @@ function getPageOptionsForCategory(
     case "models":
       return [
         {
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.page_switch_models"), 100),
+          label: safeSelectOptionText(localizer(locale, PERSONAL_PAGE_LOCALE_KEYS.models.switch), 100),
           value: "switch",
           default: currentPage === "switch",
         },
         {
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.page_parameters"), 100),
+          label: safeSelectOptionText(localizer(locale, PERSONAL_PAGE_LOCALE_KEYS.models.parameters), 100),
           value: "parameters",
           default: currentPage === "parameters",
         },
         {
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.page_fallbacks"), 100),
+          label: safeSelectOptionText(localizer(locale, PERSONAL_PAGE_LOCALE_KEYS.models.fallbacks), 100),
           value: "fallbacks",
           default: currentPage === "fallbacks",
         },
@@ -252,19 +280,19 @@ function getPageOptionsForCategory(
     case "advanced": {
       const options: SelectMenuComponentOptionData[] = [
         {
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.page_response_modes"), 100),
+          label: safeSelectOptionText(localizer(locale, PERSONAL_PAGE_LOCALE_KEYS.advanced["response-modes"]), 100),
           value: "response-modes",
           default: currentPage === "response-modes",
         },
         {
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.page_impersonation"), 100),
+          label: safeSelectOptionText(localizer(locale, PERSONAL_PAGE_LOCALE_KEYS.advanced.impersonation), 100),
           value: "impersonation",
           default: currentPage === "impersonation",
         },
       ];
       if (guildId !== null) {
         options.push({
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.page_spotlight"), 100),
+          label: safeSelectOptionText(localizer(locale, PERSONAL_PAGE_LOCALE_KEYS.advanced.spotlight), 100),
           value: "spotlight",
           default: currentPage === "spotlight",
         });
@@ -710,7 +738,7 @@ export function buildPersonalConfigPanelPayload(input: PersonalConfigPanelRender
     [
       {
         id: "profile",
-        label: localizer(locale, "commands.personal.config.category_profile"),
+        label: localizer(locale, PERSONAL_CATEGORY_LOCALE_KEYS.profile),
         customId: buildPersonalConfigRouteId({
           action: "category",
           locale,
@@ -720,7 +748,7 @@ export function buildPersonalConfigPanelPayload(input: PersonalConfigPanelRender
       },
       {
         id: "privacy",
-        label: localizer(locale, "commands.personal.config.category_privacy"),
+        label: localizer(locale, PERSONAL_CATEGORY_LOCALE_KEYS.privacy),
         customId: buildPersonalConfigRouteId({
           action: "category",
           locale,
@@ -730,7 +758,7 @@ export function buildPersonalConfigPanelPayload(input: PersonalConfigPanelRender
       },
       {
         id: "models",
-        label: localizer(locale, "commands.personal.config.category_models"),
+        label: localizer(locale, PERSONAL_CATEGORY_LOCALE_KEYS.models),
         customId: buildPersonalConfigRouteId({
           action: "category",
           locale,
@@ -740,7 +768,7 @@ export function buildPersonalConfigPanelPayload(input: PersonalConfigPanelRender
       },
       {
         id: "advanced",
-        label: localizer(locale, "commands.personal.config.category_advanced"),
+        label: localizer(locale, PERSONAL_CATEGORY_LOCALE_KEYS.advanced),
         customId: buildPersonalConfigRouteId({
           action: "category",
           locale,
