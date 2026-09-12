@@ -13,8 +13,16 @@ MODEL_REVISION="${FISH_S2_MODEL_REVISION:-9706ff036580881d87cc09465dd10014527bc4
 UPDATE_RUNTIME="${FISH_S2_UPDATE:-0}"
 
 if [[ "${UPDATE_RUNTIME,,}" =~ ^(1|true|yes|on)$ ]]; then
-  RUNTIME_REF="${FISH_S2_UPDATE_REF:-main}"
-  MODEL_REVISION="${FISH_S2_UPDATE_MODEL_REVISION:-main}"
+  if [ -n "${FISH_S2_UPDATE_REF:-}" ]; then
+    RUNTIME_REF="$FISH_S2_UPDATE_REF"
+  elif [ -z "${FISH_S2_RUNTIME_REF:-}" ]; then
+    RUNTIME_REF="main"
+  fi
+  if [ -n "${FISH_S2_UPDATE_MODEL_REVISION:-}" ]; then
+    MODEL_REVISION="$FISH_S2_UPDATE_MODEL_REVISION"
+  elif [ -z "${FISH_S2_MODEL_REVISION:-}" ]; then
+    MODEL_REVISION="main"
+  fi
 fi
 
 if ! command -v git >/dev/null 2>&1; then

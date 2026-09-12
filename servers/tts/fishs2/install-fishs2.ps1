@@ -14,11 +14,19 @@ $RuntimeRef = if ($env:FISH_S2_RUNTIME_REF) { $env:FISH_S2_RUNTIME_REF } else { 
 $ModelId = if ($env:FISH_S2_MODEL_ID) { $env:FISH_S2_MODEL_ID } else { "Imagilux/fishaudio-s2-pro" }
 $ModelRevision = if ($env:FISH_S2_MODEL_REVISION) { $env:FISH_S2_MODEL_REVISION } else { "9706ff036580881d87cc09465dd10014527bc481" }
 $UpdateRuntime = $env:FISH_S2_UPDATE -match "^(1|true|yes|on)$"
-if ($UpdateRuntime -and -not $env:FISH_S2_RUNTIME_REF) {
-  $RuntimeRef = if ($env:FISH_S2_UPDATE_REF) { $env:FISH_S2_UPDATE_REF } else { "main" }
+if ($UpdateRuntime) {
+  if ($env:FISH_S2_UPDATE_REF) {
+    $RuntimeRef = $env:FISH_S2_UPDATE_REF
+  } elseif (-not $env:FISH_S2_RUNTIME_REF) {
+    $RuntimeRef = "main"
+  }
 }
-if ($UpdateRuntime -and -not $env:FISH_S2_MODEL_REVISION) {
-  $ModelRevision = if ($env:FISH_S2_UPDATE_MODEL_REVISION) { $env:FISH_S2_UPDATE_MODEL_REVISION } else { "main" }
+if ($UpdateRuntime) {
+  if ($env:FISH_S2_UPDATE_MODEL_REVISION) {
+    $ModelRevision = $env:FISH_S2_UPDATE_MODEL_REVISION
+  } elseif (-not $env:FISH_S2_MODEL_REVISION) {
+    $ModelRevision = "main"
+  }
 }
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {

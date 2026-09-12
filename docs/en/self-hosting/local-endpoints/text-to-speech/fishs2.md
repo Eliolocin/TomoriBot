@@ -55,7 +55,8 @@ To deliberately update or test another upstream revision, set `FISH_S2_RUNTIME_R
 `FISH_S2_MODEL_REVISION` before running the installer. For a convenience update to upstream
 `main`, set `FISH_S2_UPDATE=1`; this is an explicit opt-in and uses `FISH_S2_UPDATE_REF` and
 `FISH_S2_UPDATE_MODEL_REVISION` when provided. Record any revision used for a deployment so it can
-be reproduced later.
+be reproduced later. An explicit update ref wins over a base ref. When no update ref is supplied,
+an explicitly configured base ref remains selected; otherwise the update opt-in selects `main`.
 
 `FISH_S2_RUNTIME_REPOSITORY` can point at a reviewed mirror when required. `FISH_S2_MODEL_ID` and
 `FISH_S2_MODEL_REVISION` select the Hugging Face repository and immutable revision used by the
