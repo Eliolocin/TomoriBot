@@ -1,0 +1,3 @@
+# CosyVoice itself is installed from its official requirements.txt by the setup scripts.
+# Keep this file limited to dependencies used only by the TomoriBot wrapper/setup.
+huggingface_hub==0.33.0
