@@ -9,7 +9,7 @@ config();
 
 // scripts/devtools/launch.ts
 //
-//   bun run launch [--searxng] [--crawl4ai] [--qwen3tts] [--chatterbox] [--irodoritts]
+//   bun run launch [--searxng] [--crawl4ai] [--qwen3tts] [--chatterbox] [--irodoritts] [--cosyvoice3]
 //
 //   Starts requested sidecar services, waits for them to be ready, then
 //   launches the bot in watch mode (equivalent to `bun run dev`).
@@ -39,6 +39,7 @@ ${pc.bold("Options:")}
   --qwen3tts    Start the Qwen3-TTS Python server (requires venv setup)
   --chatterbox  Start the Chatterbox TTS Python server (requires venv setup)
   --irodoritts  Start the IrodoriTTS Python server (requires venv setup)
+  --cosyvoice3  Start the CosyVoice 3 Python server (requires venv setup)
   --whisperx    Start the WhisperX transcription Python server (requires venv setup)
   --help        Show this message
 
@@ -46,6 +47,7 @@ ${pc.bold("Examples:")}
   bun run launch
   bun run launch --searxng --crawl4ai
   bun run launch --qwen3tts --searxng
+  bun run launch --cosyvoice3
 `);
   process.exit(0);
 }
@@ -96,7 +98,7 @@ const SIDECARS: Record<string, SidecarDef> = {
       "--name", "searxng",
       "-p", "8080:8080",
       "-v", `${ROOT}/servers/searxng:/etc/searxng:rw`,
-      "-e", "SEARXNG_SECRET=dev-only-not-for-production",
+      "-e", `SEARXNG_SECRET=dev-only-not-for-production`,
       "--health-cmd", "wget -q --spider http://localhost:8080/healthz || exit 1",
       "--health-interval", "10s",
       "--health-timeout", "3s",
@@ -150,6 +152,14 @@ const SIDECARS: Record<string, SidecarDef> = {
     venvRelPath: "servers/tts/irodoritts/.venv",
     scriptRelPath: "servers/tts/irodoritts/server.py",
     startupDelayMs: 8_000,
+  },
+
+  cosyvoice3: {
+    kind: "python",
+    displayName: "CosyVoice 3",
+    venvRelPath: "servers/tts/cosyvoice3/.venv",
+    scriptRelPath: "servers/tts/cosyvoice3/server.py",
+    startupDelayMs: 15_000,
   },
 
   whisperx: {
