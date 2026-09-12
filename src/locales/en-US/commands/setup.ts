@@ -108,15 +108,16 @@ Try {model_text_command} to assign a working model, or {provider_add_command} to
       policies_modal_title: `Policies`,
       policies_modal_context: `Please review TomoriBot's policies before finishing setup.
 
-When TomoriBot is triggered it sends recent messages from
-that channel to this server's AI provider. Providers and
-custom endpoints have their own terms and privacy
-practices, so please review those separately.`,
-      policies_modal_acceptance: `By continuing you confirm that you have read and accept TomoriBot's [Terms of Service]({terms_url}) and [Privacy Policy]({privacy_url}), and that you will make this information available to your server members.`,
+TomoriBot does not keep your chat history. When it answers
+in a channel, it reads that channel's recent messages for
+context and sends them to this server's AI provider.
+Providers and custom endpoints have their own terms and
+privacy practices, so please review those separately.`,
+      policies_modal_acceptance: `By continuing you confirm that you have read and accept TomoriBot's [Terms of Service]({terms_url}) and [Privacy Policy]({privacy_url}). Members can read both anytime with \`/legal\`, but only you can tell them an AI is now replying here and what it reads to do so.`,
       policies_modal_choice_label: `Confirm all three to continue`,
       policies_choice_terms: `I accept TomoriBot's Terms of Service`,
       policies_choice_privacy: `I have read TomoriBot's Privacy Policy`,
-      policies_choice_members: `I'll let my server members know`,
+      policies_choice_members: `I'll tell my members TomoriBot is an AI that reads recent messages to reply`,
       policies_required: `Confirm all three items to continue.`,
       policies_denied: `Policy acceptance is not part of this setup.`,
       provider_name: `AI Provider`,
