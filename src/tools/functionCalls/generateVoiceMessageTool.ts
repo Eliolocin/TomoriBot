@@ -85,8 +85,13 @@ export const VOICE_TOOL_VARIANTS = {
 
 export type VoiceScriptMarkup = keyof typeof VOICE_TOOL_VARIANTS;
 
-export function buildVoiceMessageToolVariant(tool: Tool, scriptMarkup: VoiceScriptMarkup): Tool {
+export function buildVoiceMessageToolVariant(
+  tool: Tool,
+  scriptMarkup: VoiceScriptMarkup,
+  supportsInstruct = false,
+): Tool {
   const variant = VOICE_TOOL_VARIANTS[scriptMarkup] ?? VOICE_TOOL_VARIANTS["bracket-tags"];
+  const exposesVoiceInstructions = scriptMarkup === "voice-design" || supportsInstruct;
   const parameters: ToolParameterSchema = {
     ...tool.parameters,
     properties: {
@@ -95,7 +100,7 @@ export function buildVoiceMessageToolVariant(tool: Tool, scriptMarkup: VoiceScri
         ...tool.parameters.properties.script,
         description: variant.scriptDescription,
       },
-      ...(scriptMarkup === "voice-design"
+      ...(exposesVoiceInstructions
         ? {
             voice_instructions: {
               type: "string" as const,
@@ -106,8 +111,13 @@ export function buildVoiceMessageToolVariant(tool: Tool, scriptMarkup: VoiceScri
     },
   };
 
+  const description =
+    supportsInstruct && scriptMarkup !== "voice-design"
+      ? `${variant.toolDescription} You may optionally provide natural-language delivery direction in voice_instructions; it shapes this message only and is not spoken aloud.`
+      : variant.toolDescription;
+
   return createToolVariant(tool, {
-    description: variant.toolDescription,
+    description,
     parameters,
   });
 }
@@ -136,10 +146,10 @@ export class GenerateVoiceMessageTool extends BaseTool {
   async assembleForContext(context: ToolAssemblyContext): Promise<Tool | null> {
     const serverId = Number.parseInt(context.state.server_id, 10);
     const activeSpeechEndpoint = Number.isInteger(serverId) ? await resolveActiveSpeechEndpoint(serverId) : null;
-    const scriptMarkup =
-      (activeSpeechEndpoint?.endpoint.extra_config?.script_markup as string | undefined) ?? "bracket-tags";
+    const endpoint = activeSpeechEndpoint?.endpoint ?? null;
+    const scriptMarkup = (endpoint?.extra_config?.script_markup as string | undefined) ?? "bracket-tags";
     const voiceDesign = shouldUseVoiceDesignForPersona(
-      activeSpeechEndpoint?.endpoint,
+      endpoint,
       context.state.activePersonaVoiceDesignPrompt,
       context.state.activePersonaVoiceName,
     );
@@ -148,8 +158,11 @@ export class GenerateVoiceMessageTool extends BaseTool {
       : scriptMarkup in VOICE_TOOL_VARIANTS
         ? (scriptMarkup as VoiceScriptMarkup)
         : "bracket-tags";
+    const capabilities = resolveVoiceSourceCapabilities(endpoint);
+    const supportsCloneInstructions =
+      !voiceDesign && capabilities.acceptsCloneShape && Boolean(endpoint?.extra_config.supports_instruct);
 
-    return buildVoiceMessageToolVariant(this, variant);
+    return buildVoiceMessageToolVariant(this, variant, supportsCloneInstructions);
   }
 
   private resolveThreadId(context: ToolContext): string | undefined {
