@@ -17,9 +17,11 @@ TomoriBot treats speech as a custom endpoint capability. Local engines run outsi
   <LinkCard title="Chatterbox TTS" href="/self-hosting/local-endpoints/text-to-speech/chatterbox/"
     description="Fast local voice cloning through Chatterbox-Turbo, with supported bracket delivery tags for expressive speech." />
   <LinkCard title="Qwen3-TTS" href="/self-hosting/local-endpoints/text-to-speech/qwen3tts/"
-    description="Multilingual local TTS with clone and VoiceDesign modes. Largest but best quality." />
+    description="Multilingual local TTS with clone and VoiceDesign modes." />
   <LinkCard title="IrodoriTTS" href="/self-hosting/local-endpoints/text-to-speech/irodoritts/"
-    description="Japanese-focused voice cloning that preserves Unicode emoji markup for emotion control." />
+    description="Japanese-focused voice cloning and VoiceDesign with Unicode emoji markup for emotion control." />
+  <LinkCard title="Fish Audio S2 Pro" href="/self-hosting/local-endpoints/text-to-speech/fishs2/"
+    description="High-quality multilingual voice cloning with fine-grained bracket expression controls. Defaults to a 16 GB-friendly INT8 checkpoint." />
 </CardGrid>
 
 ## Setup Flow
@@ -36,27 +38,24 @@ For clone engines, add and assign one voice sample per persona:
 
 1. Prepare a clean 10-20 second clip with one speaker and no background music.
 2. Open `/config` under Models > TTS Parameters & Voices and upload the sample. Any audio format is accepted; TomoriBot converts it to mono WAV.
-3. Open `/config` under Persona > Voice, then choose the persona and voice sample.
+3. Provide a matching transcript when the engine benefits from it. Fish S2 Pro in particular forwards the stored reference transcript into the cloning request.
+4. Open `/config` under Persona > Voice, then choose the persona and voice sample.
 
-For Qwen3-TTS VoiceDesign, skip the audio sample and use Persona > Voice in `/config` for each persona instead.
+For Qwen3-TTS or Irodori VoiceDesign, skip the audio sample and use Persona > Voice in `/config` for each persona instead.
 
 ElevenLabs users should choose **Add New Provider** and **ElevenLabs** in `/providers`; it registers the speech and transcription endpoints together.
 
-TomoriBot strips Discord custom emoji syntax such as `:pepega:` or `<:pepega:123456789012345678>` from generated voice scripts before synthesis. Unicode emojis are also stripped unless the speech endpoint uses emoji markup, which is intended for IrodoriTTS.
+TomoriBot strips Discord custom emoji syntax such as `:pepega:` or `<:pepega:123456789012345678>` from generated voice scripts before synthesis. Unicode emojis are also stripped unless the speech endpoint uses emoji markup, which is intended for IrodoriTTS. Bracket tags are preserved for endpoints such as Chatterbox Turbo and Fish S2 Pro when their Script Markup is set to **Bracket Tags**.
 
 ## Hardware requirements
 
-Local TTS engines are **much lighter than an LLM** — these are small models (roughly
-0.5B–1.7B parameters). Even a modest NVIDIA GPU (a few GB of VRAM is plenty) runs any of them
-comfortably and keeps synthesis fast. They also run on **CPU** — slower, but workable, since
-voice clips are short.
+Hardware requirements differ substantially between engines. Chatterbox, Qwen3-TTS, and Irodori are relatively small; Fish S2 Pro is a 4B model and is much heavier.
 
 | Engine | Model size | Notes |
 |---|---|---|
-| Chatterbox | ~0.5B (Turbo) | Fastest current option. |
+| Chatterbox | ~0.5B (Turbo) | Fast local option with bracket delivery tags. |
 | Qwen3-TTS | 1.7B (12 Hz) | Separate clone + VoiceDesign models; only one loads at a time. |
-| IrodoriTTS | 500M (v2) | Japanese-focused; `bf16` on GPU, `fp32` on CPU. |
+| IrodoriTTS | ~0.5B | Japanese-focused clone + VoiceDesign. |
+| Fish S2 Pro | 4B | Official BF16 recommends 24 GB+ VRAM; TomoriBot defaults to an INT8 checkpoint intended for 16 GB consumer GPUs. |
 
-The first synthesis after startup (or after Qwen3-TTS swaps models in auto mode) is slower
-while the model loads into memory; later requests are fast. TomoriBot waits up to
-`TTS_SYNTHESIZE_TIMEOUT_MS` (default 240000 ms) for each response.
+The first synthesis after startup (or after Qwen3-TTS swaps models in auto mode) is slower while the model loads into memory. TomoriBot waits up to `TTS_SYNTHESIZE_TIMEOUT_MS` (default 240000 ms) for each response.
