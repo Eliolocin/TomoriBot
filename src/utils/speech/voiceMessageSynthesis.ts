@@ -60,7 +60,7 @@ export interface VoiceMessageSynthesisRequest {
   elevenLabsApiKey: string;
   source: ResolvedVoiceSource;
   script: string;
-  /** Per-message delivery direction, design-shaped sources only. */
+  /** Per-message delivery direction for design or instruct-capable clone endpoints. */
   voiceInstructions?: string;
   /** Chatterbox delivery overrides for this invocation, clone sources only. */
   chatterbox?: {
@@ -154,6 +154,7 @@ export async function synthesizeVoiceMessage(
             endpoint,
             voiceSampleId: source.voiceSampleId,
             script,
+            instruct: request.voiceInstructions,
             apiKey: endpointApiKey,
             ...(chatterbox ? { chatterbox } : {}),
           })
@@ -162,6 +163,7 @@ export async function synthesizeVoiceMessage(
             refAudio: source.refAudio,
             refText: source.refText,
             script,
+            instruct: request.voiceInstructions,
             apiKey: endpointApiKey,
             ...(chatterbox ? { chatterbox } : {}),
           });
@@ -195,11 +197,8 @@ export async function synthesizeVoiceMessage(
   return {
     success: result.success,
     audioBuffer: result.audioBuffer,
-    contentType: result.contentType,
-    extension: result.extension,
-    cleanedCaptionText: result.cleanedCaptionText,
-    errorKind: result.errorKind,
-    details: result.details || "Failed to generate the ElevenLabs voice message.",
-    backendKey: "elevenlabs",
+    contentType,
+    extension: resolveExtensionFromContentType(contentType),
+    cleanedCaptionText: captionText,
   };
 }
