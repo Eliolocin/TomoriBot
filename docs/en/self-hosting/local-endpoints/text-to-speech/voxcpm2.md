@@ -154,7 +154,6 @@ Once VoxCPM2 is the active Speech model, `/generate voice-message` uses the pers
 | `VOXCPM2_RETRY_BADCASE` | `1` | Enable upstream retry behavior for abnormal generations |
 | `VOXCPM2_RETRY_BADCASE_MAX_TIMES` | `3` | Maximum automatic retries |
 | `VOXCPM2_RETRY_BADCASE_RATIO_THRESHOLD` | `6.0` | Upstream bad-case length threshold |
-| `VOXCPM2_SEED` | unset | Optional deterministic seed |
 | `VOXCPM2_PREFETCH` | `1` | Installer only: download the model during setup |
 | `TOMORI_TTS_HOST` | `127.0.0.1` | Sidecar bind address |
 | `TOMORI_TTS_PORT` | `8016` | Sidecar port |
