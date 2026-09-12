@@ -58,6 +58,7 @@ import {
   validateVoiceSampleUpload,
 } from "@/utils/speech/voiceSampleAddOperation";
 import {
+  resolveVoiceSourceCapabilities,
   resolveVoiceSourceCandidates,
   selectDefaultVoiceSource,
   type VoiceSourceCandidate,
@@ -482,6 +483,7 @@ export async function execute(
   }
 
   const anyDesignShape = candidates.some((candidate) => candidate.shape === "design");
+  const cloneInstructionsAvailable = resolveVoiceSourceCapabilities(effectiveEndpoint).cloneInstructionsAvailable;
   const expressiveness = resolveExpressivenessBackend({
     endpoint: effectiveEndpoint,
     usesElevenLabs,
@@ -498,6 +500,7 @@ export async function execute(
       // only candidates are clone-shaped, a Delivery Direction field would render and then be
       // dropped by the dispatcher.
       designShapeAvailable: anyDesignShape,
+      cloneInstructionsAvailable,
       uploadShapeSelected: defaultSource?.id === "upload",
       expressiveness,
       chatterboxDefaults: {

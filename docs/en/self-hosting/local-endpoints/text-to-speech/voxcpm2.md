@@ -31,12 +31,12 @@ One VoxCPM2 endpoint can handle all useful TomoriBot voice-source modes:
 
 | TomoriBot request | VoxCPM2 behavior |
 |---|---|
-| `text` only | Normal zero-shot synthesis |
+| `text` only | Rejected; choose a reference sample or VoiceDesign prompt |
 | `text` + `instruct` | Voice Design from a natural-language description |
 | `text` + `ref_audio` | Reference-audio voice cloning |
 | `text` + `ref_audio` + `instruct` | Controllable cloning: preserve the speaker while steering delivery |
 | `text` + `ref_audio` + `ref_text` | Ultimate Cloning using the reference audio and its transcript |
-| `text` + `ref_audio` + `ref_text` + `instruct` | Transcript-assisted cloning plus natural-language delivery control |
+| `text` + `ref_audio` + `ref_text` + `instruct` | Controllable cloning; the one-off instruction takes precedence and the transcript is not sent |
 
 VoxCPM2 represents Voice Design and style control by placing a natural-language description in parentheses before the text to synthesize. TomoriBot already has an `instruct` field for this purpose, so the wrapper performs that conversion automatically.
 
@@ -94,6 +94,8 @@ $env:VOXCPM2_PREFETCH = "0"
 
 After setup, `bun run launch --voxcpm2` starts the sidecar together with TomoriBot. The default endpoint is `http://127.0.0.1:8016`.
 
+If `VOXCPM2_API_KEY` or `TOMORI_TTS_API_KEY` is set, register the endpoint with authentication enabled and save the same key in TomoriBot. The launcher still probes the unauthenticated `/health` route, while synthesis requests use `Authorization: Bearer <key>`.
+
 ## Register in TomoriBot
 
 Run `/providers`, choose **Add New Custom Endpoint**, and configure the Speech endpoint:
@@ -103,6 +105,7 @@ Run `/providers`, choose **Add New Custom Endpoint**, and configure the Speech e
 - Endpoint URL: `http://127.0.0.1:8016`
 - Voice Source Mode: `Auto`
 - Script Markup: `Plain`
+- Supports Instruct: `Yes`
 
 After saving the connection, select it and use its model dropdown to add a Speech model. Then open `/config` > Models > Switch Models and select the VoxCPM2 speech model.
 
@@ -129,7 +132,7 @@ For a persona that should be created from a written voice description instead of
 
 TomoriBot sends the saved description as `instruct`. VoxCPM2 converts it into its native Voice Design control prefix.
 
-When a cloned persona also receives one-off voice instructions, VoxCPM2 uses controllable cloning: the reference sample supplies the speaker identity while the instruction steers qualities such as emotion, pace, or delivery.
+When a cloned persona also receives one-off voice instructions, VoxCPM2 uses controllable cloning: the reference sample supplies the speaker identity while the instruction steers qualities such as emotion, pace, or delivery. If a transcript is also stored, the instruction takes precedence because the upstream Ultimate Cloning path does not provide a reliable control-instruction mode; the transcript is intentionally omitted for that request.
 
 ## `/generate voice-message`
 
@@ -137,7 +140,8 @@ Once VoxCPM2 is the active Speech model, `/generate voice-message` uses the pers
 
 - clone personas send the stored `ref_audio` and optional `ref_text`;
 - VoiceDesign personas send their saved prompt as `instruct`;
-- one-off voice instructions are passed through `instruct` and can steer controllable cloning.
+- clone-capable endpoints with Supports Instruct enabled expose the Delivery Direction field and pass one-off instructions through `instruct`;
+- when an instruction is present with a clone sample, TomoriBot uses `reference_wav_path` only and does not send the transcript prompt fields.
 
 ## Environment variables
 
@@ -155,9 +159,16 @@ Once VoxCPM2 is the active Speech model, `/generate voice-message` uses the pers
 | `VOXCPM2_RETRY_BADCASE_MAX_TIMES` | `3` | Maximum automatic retries |
 | `VOXCPM2_RETRY_BADCASE_RATIO_THRESHOLD` | `6.0` | Upstream bad-case length threshold |
 | `VOXCPM2_PREFETCH` | `1` | Installer only: download the model during setup |
+| `VOXCPM2_PORT` | `8016` | VoxCPM2 sidecar port; falls back to `TOMORI_TTS_PORT` when unset |
 | `TOMORI_TTS_HOST` | `127.0.0.1` | Sidecar bind address |
-| `TOMORI_TTS_PORT` | `8016` | Sidecar port |
+| `TOMORI_TTS_PORT` | `8016` | Backward-compatible shared sidecar port fallback |
+| `VOXCPM2_MAX_REF_AUDIO_BYTES` | `10485760` | Maximum decoded reference-audio size |
+| `VOXCPM2_API_KEY` | unset | Optional bearer token for `/synthesize`; `TOMORI_TTS_API_KEY` is accepted as a fallback |
+| `TOMORI_TTS_API_KEY` | unset | Shared optional bearer token fallback for `/synthesize` |
+| `TOMORI_TTS_ALLOW_REMOTE_BIND` | `0` | Set to `1` only to allow a non-loopback bind without a bearer token |
 | `TOMORI_TTS_MAX_TEXT_CHARS` | `2000` | Maximum accepted synthesis text length |
+
+Reference audio must be a non-empty WAV container. The wrapper enforces the decoded byte limit before writing a temporary file. `/health` remains unauthenticated for local readiness checks; `/synthesize` requires `Authorization: Bearer <key>` whenever a key is configured. Keep the default loopback bind unless a reverse proxy or explicit remote policy is in place.
 
 ## Alternate checkpoints and runtimes
 

@@ -56,4 +56,4 @@ Qwen3-TTS defaults to auto mode. One server URL can handle both clone and VoiceD
 
 Irodori-TTS v4.1 also supports TomoriBot's `Auto` voice source mode from one endpoint. Clone requests use `ref_audio`; VoiceDesign requests use `instruct`, which the wrapper maps to Irodori caption conditioning.
 
-VoxCPM2 uses one official `openbmb/VoxCPM2` model for all modes. Reference audio maps to normal cloning, reference audio plus its stored transcript maps to Ultimate Cloning, and `instruct` is converted into VoxCPM2's natural-language Voice Design / controllable-cloning prefix. Use Voice Source Mode `Auto` and Script Markup `Plain`.
+VoxCPM2 uses one official `openbmb/VoxCPM2` model for all modes. Reference audio maps to normal cloning, reference audio plus its stored transcript maps to Ultimate Cloning, and `instruct` is converted into VoxCPM2's natural-language Voice Design / controllable-cloning prefix. Register it with Voice Source Mode `Auto`, Script Markup `Plain`, and Supports Instruct `Yes`. If a clone request includes both a transcript and one-off instruction, the instruction path wins and the transcript prompt is omitted.

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import { assembleToolsForContext } from "@/tools/assembly";
 import { buildGenerateImageToolVariant, GenerateImageTool } from "@/tools/functionCalls/generateImageTool";
 import type { ImageToolCapabilities } from "@/tools/functionCalls/generateImageToolCapabilities";
@@ -6,6 +6,25 @@ import { buildVoiceMessageToolVariant, GenerateVoiceMessageTool } from "@/tools/
 import { buildWebSearchToolVariant, WebSearchTool } from "@/tools/webSearch/webSearchTool";
 import type { SearchCategory } from "@/tools/webSearch/types";
 import type { Tool, ToolAssemblyContext, ToolAssemblyState, ToolResult } from "@/types/tool/interfaces";
+import type { CustomEndpointRow } from "@/types/db/schema";
+import * as realSpeechEndpointResolver from "@/utils/provider/speechEndpointResolver";
+import { createScopedModuleMocker } from "../../helpers/mockSurface";
+
+const scopedMock = createScopedModuleMocker(mock, {
+  "@/utils/provider/speechEndpointResolver": realSpeechEndpointResolver,
+});
+
+scopedMock.module("@/utils/provider/speechEndpointResolver", () => ({
+  ...realSpeechEndpointResolver,
+  resolveActiveSpeechEndpoint: async () => ({
+    endpoint: {
+      api_style: "tts-clone",
+      endpoint_url: "http://127.0.0.1:8016",
+      extra_config: { voice_mode: "clone", script_markup: "plain", supports_instruct: true },
+    } as unknown as CustomEndpointRow,
+    apiKey: "",
+  }),
+}));
 
 function createAssemblyState(overrides: Partial<ToolAssemblyState> = {}): ToolAssemblyState {
   return {
@@ -221,5 +240,22 @@ describe("tool schema assembly", () => {
 
     expect(getPropertyNames(tool)).toEqual(["script", "title", "voice_instructions"]);
     expect(tool.description).toContain("voice design prompt");
+  });
+
+  it("assembles generate_voice_message with clone instructions when the endpoint advertises them", () => {
+    const tool = buildVoiceMessageToolVariant(new GenerateVoiceMessageTool(), "plain", {
+      voiceInstructionsAvailable: true,
+    });
+
+    expect(getPropertyNames(tool)).toEqual(["script", "title", "voice_instructions"]);
+    expect(tool.parameters.properties.voice_instructions?.description).toContain("one-off delivery");
+  });
+
+  it("assembles clone instructions from the active endpoint capability", async () => {
+    const assembled = await assembleToolsForContext([new GenerateVoiceMessageTool()], createAssemblyContext());
+    const tool = assembled[0];
+
+    expect(tool).toBeDefined();
+    expect(getPropertyNames(tool as Tool)).toContain("voice_instructions");
   });
 });

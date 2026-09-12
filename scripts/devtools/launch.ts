@@ -16,7 +16,7 @@ config();
 //
 //   Docker sidecars are started via docker inspect/start/run and polled until
 //   their healthcheck reports "healthy". Python sidecars are spawned directly
-//   from their pre-built venv and given a configurable startup delay.
+//   from their pre-built venv and polled through their JSON health endpoint.
 //
 //   Press Ctrl+C to stop everything.
 
@@ -80,8 +80,12 @@ interface PythonSidecar {
   scriptRelPath: string;
   /** extra args passed to the script */
   scriptArgs?: string[];
-  /** milliseconds to wait after spawn before proceeding (default 3s) */
-  startupDelayMs?: number;
+  /** JSON health endpoint used to distinguish loading from ready. */
+  healthUrl: string;
+  /** Status values that mean the server can accept requests. */
+  readyStatuses?: readonly string[];
+  /** Maximum time to wait for the model to become ready. */
+  healthTimeoutMs?: number;
 }
 
 type SidecarDef = DockerSidecar | PythonSidecar;
@@ -135,7 +139,8 @@ const SIDECARS: Record<string, SidecarDef> = {
     displayName: "Qwen3-TTS",
     venvRelPath: "servers/tts/qwen3tts/.venv",
     scriptRelPath: "servers/tts/qwen3tts/server.py",
-    startupDelayMs: 5_000,
+    healthUrl: `http://127.0.0.1:${process.env.TOMORI_TTS_PORT ?? "8012"}/health`,
+    readyStatuses: ["ok", "idle"],
   },
 
   chatterbox: {
@@ -143,7 +148,7 @@ const SIDECARS: Record<string, SidecarDef> = {
     displayName: "Chatterbox TTS",
     venvRelPath: "servers/tts/chatterbox/.venv",
     scriptRelPath: "servers/tts/chatterbox/server.py",
-    startupDelayMs: 5_000,
+    healthUrl: `http://127.0.0.1:${process.env.TOMORI_TTS_PORT ?? "8011"}/health`,
   },
 
   irodoritts: {
@@ -151,7 +156,7 @@ const SIDECARS: Record<string, SidecarDef> = {
     displayName: "IrodoriTTS",
     venvRelPath: "servers/tts/irodoritts/.venv",
     scriptRelPath: "servers/tts/irodoritts/server.py",
-    startupDelayMs: 8_000,
+    healthUrl: `http://127.0.0.1:${process.env.TOMORI_TTS_PORT ?? "8013"}/health`,
   },
 
   voxcpm2: {
@@ -159,7 +164,7 @@ const SIDECARS: Record<string, SidecarDef> = {
     displayName: "VoxCPM2",
     venvRelPath: "servers/tts/voxcpm2/.venv",
     scriptRelPath: "servers/tts/voxcpm2/server.py",
-    startupDelayMs: 15_000,
+    healthUrl: `http://127.0.0.1:${process.env.VOXCPM2_PORT ?? process.env.TOMORI_TTS_PORT ?? "8016"}/health`,
   },
 
   whisperx: {
@@ -167,7 +172,7 @@ const SIDECARS: Record<string, SidecarDef> = {
     displayName: "WhisperX",
     venvRelPath: "servers/stt/.venv",
     scriptRelPath: "servers/stt/whisperx_server.py",
-    startupDelayMs: 10_000,
+    healthUrl: `http://127.0.0.1:${process.env.TOMORI_STT_PORT ?? process.env.TOMORI_TRANSCRIPTION_PORT ?? "8021"}/health`,
   },
 };
 
@@ -230,6 +235,51 @@ async function waitForHealthy(def: DockerSidecar, timeoutMs: number): Promise<vo
   throw new Error(`Container "${containerName}" did not become healthy within ${timeoutMs / 1000}s.`);
 }
 
+type PythonHealthResult =
+  | { kind: "ready"; ready: boolean }
+  | { kind: "exit"; code: number }
+  | { kind: "retry" };
+
+async function probeJsonHealth(url: string, readyStatuses: readonly string[]): Promise<boolean> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(3_000) });
+    if (!response.ok) return false;
+    const payload: unknown = await response.json();
+    if (!payload || typeof payload !== "object" || !("status" in payload)) return false;
+    const status = payload.status;
+    return typeof status === "string" && readyStatuses.includes(status);
+  } catch {
+    return false;
+  }
+}
+
+async function waitForPythonReady(
+  proc: ReturnType<typeof Bun.spawn>,
+  def: PythonSidecar,
+  timeoutMs: number,
+): Promise<void> {
+  const readyStatuses = def.readyStatuses ?? ["ok"];
+  const processExit = proc.exited.then((code): PythonHealthResult => ({ kind: "exit", code }));
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const result = await Promise.race<PythonHealthResult>([
+      probeJsonHealth(def.healthUrl, readyStatuses).then(
+        (ready): PythonHealthResult => ({ kind: "ready", ready }),
+      ),
+      processExit,
+      Bun.sleep(1_000).then((): PythonHealthResult => ({ kind: "retry" })),
+    ]);
+
+    if (result.kind === "exit") {
+      throw new Error(`Process exited before readiness (exit ${result.code}).`);
+    }
+    if (result.kind === "ready" && result.ready) return;
+  }
+
+  throw new Error(`Server did not report a ready JSON status within ${timeoutMs / 1000}s.`);
+}
+
 /**
  * Ensures a Docker sidecar is running. Creates the container via "docker run"
  * if it doesn't exist, or resumes it with "docker start" if it does.
@@ -268,15 +318,21 @@ async function ensureDockerSidecar(def: DockerSidecar): Promise<void> {
 
 
 /**
- * Spawns a Python sidecar server from its pre-built venv and waits
- * `startupDelayMs` milliseconds for it to bind before returning the handle.
+ * Spawns a Python sidecar server from its pre-built venv and waits for JSON readiness before
+ * returning the handle.
  * Throws if the venv is missing (user must run setup first).
  */
 async function startPythonSidecar(
   def: PythonSidecar,
   flagName: string,
 ): Promise<ReturnType<typeof Bun.spawn>> {
-  const { displayName, venvRelPath, scriptRelPath, scriptArgs = [], startupDelayMs = 3_000 } = def;
+  const {
+    displayName,
+    venvRelPath,
+    scriptRelPath,
+    scriptArgs = [],
+    healthTimeoutMs = Number.parseInt(process.env.TOMORI_TTS_STARTUP_TIMEOUT_MS ?? "300000", 10),
+  } = def;
   const label = pc.magenta(`[${displayName}]`);
 
   const pythonExe = resolvePythonExe(venvRelPath);
@@ -296,10 +352,14 @@ async function startPythonSidecar(
     cwd: ROOT,
   });
 
-  // Give the Python HTTP server time to bind its port.
-  console.log(`${label} Waiting ${startupDelayMs / 1000}s for server to initialize...`);
-  await Bun.sleep(startupDelayMs);
-  console.log(`${label} ${pc.green("Started ✓")}`);
+  console.log(`${label} Waiting for JSON readiness (up to ${healthTimeoutMs / 1000}s)...`);
+  try {
+    await waitForPythonReady(proc, def, healthTimeoutMs);
+  } catch (error) {
+    try { proc.kill(); } catch { /* already exited */ }
+    throw new Error(`${displayName} did not become ready: ${error instanceof Error ? error.message : error}`);
+  }
+  console.log(`${label} ${pc.green("Ready ✓")}`);
 
   return proc;
 }
