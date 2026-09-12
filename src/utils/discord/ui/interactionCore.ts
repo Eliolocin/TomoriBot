@@ -2095,13 +2095,18 @@ function reportPanelFailure(
   try {
     const customId =
       typeof target === "object" && target !== null && "customId" in target ? target.customId : undefined;
+    // A function target and a slash-command interaction carry no route id, so the namespace falls
+    // back rather than guessing. Queries should still group on namespace + tone, and a call site
+    // that knows its cause sets `receipt.reason` for an exact key.
+    const namespace = typeof customId === "string" ? (customId.split(":")[0] ?? "unknown") : "unknown";
     log.metric("panel_failure", {
       locale: options?.locale ?? "en-US",
       tone: receipt.tone,
+      // Deliberately not the heading as the grouping key: a localized heading files the same defect
+      // under a different label per locale.
+      reason: receipt.reason ?? `${namespace}_${receipt.tone}`,
+      namespace,
       heading: receipt.heading,
-      // The namespace is the route prefix before the version segment, so a metric query can group
-      // failures by panel without a second lookup.
-      namespace: typeof customId === "string" ? (customId.split(":")[0] ?? "unknown") : "unknown",
     });
   } catch {
     // Diagnostics must never be able to break the delivery they describe.

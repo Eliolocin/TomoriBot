@@ -12,6 +12,7 @@ import {
   type StPresetsReadResult,
 } from "@/utils/db/repositories/PresetRepository";
 import { safeDownload } from "@/utils/security/safeDownload";
+import { log } from "@/utils/misc/logger";
 import {
   MAX_PRESET_FILE_SIZE_MB,
   MAX_PRESET_NAME_LENGTH,
@@ -182,7 +183,16 @@ export async function importStPreset(
   let rawPreset: RawSTPreset;
   try {
     rawPreset = JSON.parse(downloadResult.buffer.toString("utf-8"));
-  } catch {
+  } catch (error) {
+    // A preset that will not parse, or is not JSON at all, is the actor's file rather than an
+    // incident, but the uploaded bytes are gone by the time they see the receipt, so warn here is
+    // still not enough to diagnose a report. Recorded as a metric to stay out of the error stream.
+    log.metric("panel_failure", {
+      namespace: "config",
+      tone: "error",
+      reason: "st_preset_upload_invalid_json",
+      detail: error instanceof Error ? error.message.slice(0, 200) : "unknown",
+    });
     return { status: "invalid_json" };
   }
 

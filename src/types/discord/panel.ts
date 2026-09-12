@@ -6,6 +6,14 @@ export interface PanelReceipt {
   heading: string;
   detail: string;
   metadata?: string;
+  /**
+   * Stable machine key naming why this receipt happened, for operator queries.
+   *
+   * `heading` is localized, so grouping failures by it splits one defect across locales. Call sites
+   * that know their specific cause set this; the failure metric falls back to the route namespace
+   * plus tone when it is absent.
+   */
+  reason?: string;
 }
 
 export interface ResolvedRangeSelection<T> {

@@ -229,6 +229,9 @@ function addReceipt(locale: string, result: AddServerProviderResult): PanelRecei
     tone: "error",
     heading: localizer(locale, "commands.providers.add_provider_failed"),
     detail: localizer(locale, detailKey[result.status]),
+    // The operation status is already the machine-readable cause, so the metric key can name it
+    // exactly instead of falling back to the route namespace.
+    reason: `provider_add_${result.status}`,
   };
 }
 
@@ -247,6 +250,7 @@ function addEndpointReceipt(locale: string, result: AddCustomEndpointConnectionR
       detail: localizer(locale, "commands.providers.endpoint_unreachable", {
         reason: escapeDiscordMarkdown(result.reason.replace(/\s+/g, " ").trim().slice(0, 300)),
       }),
+      reason: "endpoint_add_unreachable",
     };
   }
   const keys: Record<Exclude<AddCustomEndpointConnectionResult["status"], "success" | "unreachable">, string> = {
@@ -260,6 +264,7 @@ function addEndpointReceipt(locale: string, result: AddCustomEndpointConnectionR
     tone: "error",
     heading: localizer(locale, "commands.providers.add_endpoint_failed"),
     detail: localizer(locale, keys[result.status]),
+    reason: `endpoint_add_${result.status}`,
   };
 }
 
@@ -284,6 +289,7 @@ function modelReceipt(locale: string, result: SaveProviderModelResult): PanelRec
     tone: "error",
     heading: localizer(locale, "commands.providers.model_save_failed"),
     detail: localizer(locale, keys[result.status]),
+    reason: `model_save_${result.status}`,
   };
 }
 
@@ -315,6 +321,7 @@ function providerEditReceipt(locale: string, result: EditProviderResult): PanelR
     tone: "error",
     heading: localizer(locale, "commands.providers.change_failed"),
     detail: localizer(locale, keys[result.status]),
+    reason: `provider_edit_${result.status}`,
   };
 }
 
@@ -340,6 +347,7 @@ function endpointEditReceipt(locale: string, result: EditEndpointResult): PanelR
       detail: localizer(locale, "commands.providers.endpoint_unreachable", {
         reason: escapeDiscordMarkdown(result.reason.replace(/\s+/g, " ").trim().slice(0, 300)),
       }),
+      reason: "endpoint_edit_unreachable",
     };
   }
   const keys: Record<Exclude<EditEndpointResult["status"], "success" | "unchanged" | "unreachable">, string> = {
@@ -351,6 +359,7 @@ function endpointEditReceipt(locale: string, result: EditEndpointResult): PanelR
     tone: "error",
     heading: localizer(locale, "commands.providers.change_failed"),
     detail: localizer(locale, keys[result.status]),
+    reason: `endpoint_edit_${result.status}`,
   };
 }
 

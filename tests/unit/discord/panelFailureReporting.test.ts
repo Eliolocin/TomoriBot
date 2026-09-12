@@ -29,6 +29,7 @@ const ERROR_RECEIPT: PanelReceipt = {
   tone: "error",
   heading: "Update Failed",
   detail: "Failed to update the configuration in the database. Please try again.",
+  reason: "custom_endpoint_unreachable",
 };
 
 const WARNING_RECEIPT: PanelReceipt = {
@@ -72,8 +73,38 @@ describe("panel failure reporting chokepoint", () => {
       expect(metrics[0]?.name).toBe("panel_failure");
       expect(metrics[0]?.fields.tone).toBe("error");
       expect(metrics[0]?.fields.namespace).toBe("config");
+      expect(metrics[0]?.fields.reason).toBe("custom_endpoint_unreachable");
       expect(metrics[0]?.fields.heading).toBe("Update Failed");
       expect(metrics[0]?.fields.locale).toBe("en-US");
+    } finally {
+      restore();
+    }
+  });
+
+  it("falls back to a namespace and tone key when the receipt names no cause", async () => {
+    const { metrics, restore } = captureMetrics();
+    try {
+      await deliverGuardedPanel(fakeInteraction("moderation:v1:page:en-US"), validPayload(), {
+        locale: "en-US",
+        receipt: { tone: "error", heading: "Update Failed", detail: "Try again." },
+      });
+      // The heading is localized, so it cannot be the grouping key; the fallback stays stable
+      // across locales by using the route namespace instead.
+      expect(metrics[0]?.fields.reason).toBe("moderation_error");
+    } finally {
+      restore();
+    }
+  });
+
+  it("keeps the fallback key stable when the target carries no route id", async () => {
+    const { metrics, restore } = captureMetrics();
+    try {
+      await deliverGuardedPanel(async () => undefined, validPayload(), {
+        locale: "en-US",
+        receipt: { tone: "error", heading: "Update Failed", detail: "Try again." },
+      });
+      expect(metrics[0]?.fields.namespace).toBe("unknown");
+      expect(metrics[0]?.fields.reason).toBe("unknown_error");
     } finally {
       restore();
     }

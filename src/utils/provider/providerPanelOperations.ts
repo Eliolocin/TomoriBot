@@ -811,7 +811,13 @@ async function addCuratedProvider(
   let providerInstance: Awaited<ReturnType<typeof ProviderFactory.getProviderByName>>;
   try {
     providerInstance = await dependencies.getProvider(provider);
-  } catch {
+  } catch (error) {
+    // Reported to the actor as an unsupported provider, which is only true for the guard above.
+    // Reaching here means construction or loading failed, so the real cause has to be recorded.
+    log.error("Provider could not be constructed while adding a server provider", error as Error, {
+      errorType: "ProviderPanelOperationFailed",
+      metadata: { operation: "addCuratedProvider", provider },
+    });
     return { status: "unsupported-provider" };
   }
   const validation = await providerInstance.validateApiKey(input.apiKey);
@@ -900,7 +906,13 @@ async function addPersonalProvider(input: AddServerProviderInput): Promise<AddSe
   let instance: Awaited<ReturnType<typeof ProviderFactory.getProviderByName>>;
   try {
     instance = await ProviderFactory.getProviderByName(provider);
-  } catch {
+  } catch (error) {
+    // Same confusion as the server path: the actor is told the provider is unsupported when the
+    // truth is that loading or constructing it threw.
+    log.error("Provider could not be constructed while adding a personal provider", error as Error, {
+      errorType: "ProviderPanelOperationFailed",
+      metadata: { operation: "addPersonalProvider", provider },
+    });
     return { status: "unsupported-provider" };
   }
   if (!(await instance.validateApiKey(apiKey)).valid) return { status: "validation-failed" };
@@ -970,16 +982,15 @@ export async function addCustomEndpointConnection(
     apiKey: authToken || null,
   });
   if (!reachable.ok) {
-    // Expected refusal, so warn rather than error: the actor can correct a URL or credential and
-    // retry. The reason is still recorded here because the receipt shows only the safe subset.
-    log.warn("Custom endpoint reachability check refused a new connection", undefined, {
-      errorType: "CustomEndpointUnreachable",
-      metadata: {
-        serverDiscId: input.serverDiscId,
-        apiStyle: input.apiStyle,
-        endpointUrl,
-        reason: reachable.reason,
-      },
+    // An expected refusal, so this is a metric and not an incident. It cannot be `log.warn`: the
+    // production level filter drops warn entirely, which is the blind spot this change exists to
+    // close. The reason is carried here because the receipt shows only the safe subset.
+    log.metric("panel_failure", {
+      namespace: "providers",
+      tone: "error",
+      reason: "custom_endpoint_unreachable",
+      apiStyle: input.apiStyle,
+      detail: reachable.reason.slice(0, 200),
     });
     return { status: "unreachable", reason: reachable.reason };
   }
@@ -1520,17 +1531,13 @@ async function editServerEndpoint(input: EditEndpointInput): Promise<EditEndpoin
         apiKey: credential,
       });
       if (!reachable.ok) {
-        // Same expected-refusal treatment as the add path: the edited URL or credential is what
-        // the actor has to correct, and the receipt does not carry the raw reason.
-        log.warn("Custom endpoint reachability check refused an edit", undefined, {
-          errorType: "CustomEndpointUnreachable",
-          metadata: {
-            serverDiscId: input.serverDiscId,
-            entryId: input.entryId,
-            apiStyle: connection.api_style,
-            endpointUrl,
-            reason: reachable.reason,
-          },
+        // Same treatment as the add path: a metric, because warn never reaches production.
+        log.metric("panel_failure", {
+          namespace: "providers",
+          tone: "error",
+          reason: "custom_endpoint_unreachable",
+          apiStyle: connection.api_style,
+          detail: reachable.reason.slice(0, 200),
         });
         return { status: "unreachable", reason: reachable.reason };
       }

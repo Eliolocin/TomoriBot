@@ -1398,15 +1398,15 @@ export function createModerationInteractionRoute(
         }
         // A batch that removed some entries and refused others reads as a failure to the actor
         // while the counter above still counts the removals that did land. Recording the split
-        // keeps those two stories reconcilable.
-        if (failed && successCount > 0) {
-          log.error("Whitelist channel removal partially failed", undefined, {
-            errorType: "ModerationBatchPartialFailure",
-            metadata: {
-              serverId: scope.serverId,
-              requestedCount: ids.length,
-              removedCount: successCount,
-            },
+        // keeps those two stories reconcilable. A batch where nothing landed is the more serious
+        // outcome, so it is recorded too rather than being the one case that stays silent.
+        if (failed) {
+          log.metric("panel_failure", {
+            namespace: "moderation",
+            tone: "error",
+            reason: successCount > 0 ? "whitelist_channel_remove_partial" : "whitelist_channel_remove_total",
+            requested: ids.length,
+            removed: successCount,
           });
         }
         const receipt: PanelReceipt = failed
@@ -1851,14 +1851,13 @@ export function createModerationInteractionRoute(
             userDiscId: interaction.user?.id ?? "",
           });
         }
-        if (failed && successCount > 0) {
-          log.error("Whitelist role removal partially failed", undefined, {
-            errorType: "ModerationBatchPartialFailure",
-            metadata: {
-              serverId: scope.serverId,
-              requestedCount: ids.length,
-              removedCount: successCount,
-            },
+        if (failed) {
+          log.metric("panel_failure", {
+            namespace: "moderation",
+            tone: "error",
+            reason: successCount > 0 ? "whitelist_role_remove_partial" : "whitelist_role_remove_total",
+            requested: ids.length,
+            removed: successCount,
           });
         }
         const receipt: PanelReceipt = failed
@@ -2202,13 +2201,12 @@ export function createModerationInteractionRoute(
             userDiscId: interaction.user?.id ?? "",
           });
         }
-        if (failed && successCount > 0) {
-          log.error("Persona channel removal partially failed", undefined, {
-            errorType: "ModerationBatchPartialFailure",
-            metadata: {
-              serverId: scope.serverId,
-              removedCount: successCount,
-            },
+        if (failed) {
+          log.metric("panel_failure", {
+            namespace: "moderation",
+            tone: "error",
+            reason: "persona_channel_remove_failed",
+            removed: successCount,
           });
         }
         const receipt: PanelReceipt = failed
@@ -2431,6 +2429,7 @@ export function createModerationInteractionRoute(
             tone: "error",
             heading: localizer(route.locale, "commands.moderation.quota_edit_failed"),
             detail: localizer(route.locale, "commands.moderation.quota_edit_failed_detail"),
+            reason: `quota_edit_${result.status}`,
           };
         }
 
