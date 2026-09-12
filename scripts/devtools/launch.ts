@@ -172,7 +172,7 @@ const SIDECARS: Record<string, SidecarDef> = {
     displayName: "WhisperX",
     venvRelPath: "servers/stt/.venv",
     scriptRelPath: "servers/stt/whisperx_server.py",
-    startupDelayMs: 10_000,
+    httpHealthUrl: `http://127.0.0.1:${process.env.TOMORI_STT_PORT ?? process.env.TOMORI_TRANSCRIPTION_PORT ?? "8021"}/health`,
   },
 };
 
