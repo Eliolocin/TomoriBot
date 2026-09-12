@@ -1828,7 +1828,7 @@ describe("receipt locale keys resolve", () => {
 });
 
 // The batch path exists so that dissolving `memory personal add` does not remove the ability to
-// author many memories in a text editor and upload them. Wave 7's import reads a JSON export, so it
+// author many memories in a text editor and upload them. Import reads a JSON export, so it
 // is round-trip transfer rather than authoring and does not replace this.
 describe("Add Memory batch upload", () => {
   function makeAddInteraction(nonce: string, typedContent: string) {

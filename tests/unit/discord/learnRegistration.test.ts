@@ -47,7 +47,7 @@ describe("/learn registration", () => {
     expect(executionMap.get("learn")?.has("history")).toBe(true);
   }, 30000);
 
-  // The former "/memory history is gone" check here is gone: /memory itself dissolved once its own
-  // last leaves moved to /export and /import, and that dissolution is asserted once, for every fully
-  // dissolved root, by configRegistration.test.ts's DISSOLVED_ROOTS list.
+  // The former "/memory history is gone" check here is gone: /memory is listed in
+  // configRegistration.test.ts's DISSOLVED_ROOTS, which asserts it is absent from both the execution
+  // map and the registration data.
 });

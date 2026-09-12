@@ -2,9 +2,9 @@
  * `/server nuke` becomes the bare root `/nuke`. Since `server` restricts to guilds and requires
  * ManageGuild, `/nuke` must manually assert both restrictions.
  *
- * The former "/server still exists and doesn't have a nuke subcommand" checks here are gone: /server
- * itself dissolved once its own last leaves moved to /export and /import, and that dissolution is
- * asserted once, for every fully dissolved root, by configRegistration.test.ts's DISSOLVED_ROOTS list.
+ * The former "/server still exists and doesn't have a nuke subcommand" checks here are gone: /server is
+ * listed in configRegistration.test.ts's DISSOLVED_ROOTS, which asserts it is absent from both the
+ * execution map and the registration data.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { loadCommandData, ROOT_COMMAND_EXECUTION_KEY } from "@/utils/discord/commandLoader";

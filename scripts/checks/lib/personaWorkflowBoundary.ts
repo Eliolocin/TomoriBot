@@ -33,6 +33,7 @@ export type PersonaWorkflowViolationKind =
   | "low-level-picker-reference"
   | "preserved-selected-interaction"
   | "empty-picker-on-select"
+  | "self-acknowledging-on-selected"
   | "competing-persona-helper";
 
 /** One forbidden persona-picker pattern found in source. */
@@ -190,6 +191,100 @@ function collectImportedAliases(sourceFile: ts.SourceFile, importedName: string)
   return aliases;
 }
 
+/**
+ * Calls that acknowledge an interaction outright, as opposed to the in-place update and
+ * defer-update the workflow performs on the anchor message. A selection callback that makes one
+ * of these claims an interaction the anchor already owns, and Discord answers it as a failure.
+ *
+ * `deferReply` is only ever an interaction acknowledgement, so it is forbidden whatever it is
+ * called on. `reply` is not: the workflow hands the callback a `beginSeparatePublicReply()` phase
+ * whose whole purpose is to post a second message, so that call is legitimate and is identified by
+ * the phase type in `isPublicReplyPhaseReceiver` rather than by its method name.
+ */
+const SELF_ACKNOWLEDGEMENT_CALLS = new Set(["deferReply"]);
+const PUBLIC_REPLY_METHOD = "reply";
+
+/** Calls returning the workflow's separate-public-message phase rather than an acknowledgement. */
+const PUBLIC_REPLY_PHASE_FACTORIES = new Set(["beginSeparatePublicReply"]);
+
+/** Type names carrying a `reply` that posts the workflow's separate public message. */
+const PUBLIC_REPLY_PHASE_TYPES = new Set(["PersonaWorkflowPublicReplyPhase"]);
+
+/**
+ * Names the type behind a receiver by resolving its declaration in the same body. Both the annotated
+ * `const phase: T = ...` and the inferred `const phase = selection.beginSeparatePublicReply(...)`
+ * shapes resolve, because the workflow documents the second and commands use it. A receiver that
+ * resolves to nothing stays subject to the rule rather than being excused by an unresolvable name.
+ *
+ * Resolution is by name within the nearest enclosing function: the receiver is a sibling reference to
+ * the declaration, not a descendant of it, so walking ancestors alone never reaches it.
+ */
+function resolvedTypeName(receiver: ts.Expression): string | null {
+  const unwrapped = unwrapExpression(receiver);
+  if (!ts.isIdentifier(unwrapped)) return null;
+  const name = unwrapped.text;
+
+  let scope: ts.Node | undefined = unwrapped;
+  while (scope && !ts.isSourceFile(scope)) {
+    if (ts.isFunctionLike(scope)) break;
+    scope = scope.parent;
+  }
+  if (!scope) return null;
+
+  let found: string | null = null;
+  const search = (node: ts.Node): void => {
+    if (found !== null) return;
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name) {
+      const type = node.type;
+      if (type && ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName)) {
+        found = type.typeName.text;
+        return;
+      }
+      // Awaited here rather than in the shared `unwrapExpression`, whose other callers reason about
+      // empty functions and boolean literals where an awaited value is not the same expression.
+      let initializer = node.initializer;
+      while (initializer && ts.isAwaitExpression(initializer)) initializer = initializer.expression;
+      if (initializer) {
+        const call = unwrapExpression(initializer);
+        if (ts.isCallExpression(call)) {
+          const callee = unwrapExpression(call.expression);
+          if (ts.isPropertyAccessExpression(callee)) found = callee.name.text;
+          else if (ts.isIdentifier(callee)) found = callee.text;
+        }
+      }
+      return;
+    }
+    ts.forEachChild(node, search);
+  };
+  search(scope);
+  return found;
+}
+
+function isPublicReplyPhaseReceiver(receiver: ts.Expression): boolean {
+  const typeName = resolvedTypeName(receiver);
+  return typeName !== null && (PUBLIC_REPLY_PHASE_TYPES.has(typeName) || PUBLIC_REPLY_PHASE_FACTORIES.has(typeName));
+}
+
+/** The callback whose body must not acknowledge, named as the workflow's options declare it. */
+const WORKFLOW_ON_SELECTED = "onSelected";
+
+/**
+ * Every function expression or declaration a property initializer can present as a callback.
+ * Returns more than one entry only for a conditional or logical expression, where either branch
+ * is still a callback body and so both are scanned.
+ */
+function callbackBodies(initializer: ts.Expression): ts.FunctionLikeDeclaration[] {
+  const unwrapped = unwrapExpression(initializer);
+  if (ts.isArrowFunction(unwrapped) || ts.isFunctionExpression(unwrapped)) return [unwrapped];
+  if (ts.isConditionalExpression(unwrapped)) {
+    return [...callbackBodies(unwrapped.whenTrue), ...callbackBodies(unwrapped.whenFalse)];
+  }
+  if (ts.isBinaryExpression(unwrapped)) {
+    return [...callbackBodies(unwrapped.left), ...callbackBodies(unwrapped.right)];
+  }
+  return [];
+}
+
 function scriptKindForPath(file: string): ts.ScriptKind {
   return file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
 }
@@ -237,6 +332,32 @@ export function scanPersonaWorkflowSource(
       symbol,
       message,
     });
+  };
+
+  /**
+   * Scans one callback body for an acknowledgement call on the interaction. The workflow's own
+   * acknowledgement is not visible here: it happens through the message controller's in-place
+   * methods, which are not named like Discord's interaction acknowledgement methods.
+   */
+  const walkForSelfAcknowledgement = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = unwrapExpression(node.expression);
+      if (ts.isPropertyAccessExpression(callee)) {
+        const method = callee.name.text;
+        const isAcknowledgement =
+          SELF_ACKNOWLEDGEMENT_CALLS.has(method) ||
+          (method === PUBLIC_REPLY_METHOD && !isPublicReplyPhaseReceiver(callee.expression));
+        if (isAcknowledgement) {
+          addViolation(
+            callee.name,
+            "self-acknowledging-on-selected",
+            method,
+            `A selection callback must not call ${method}() on the interaction; the anchor workflow owns acknowledgement.`,
+          );
+        }
+      }
+    }
+    ts.forEachChild(node, walkForSelfAcknowledgement);
   };
 
   const visit = (node: ts.Node): void => {
@@ -333,6 +454,13 @@ export function scanPersonaWorkflowSource(
           "Remove the empty picker callback; selection is returned by the persona workflow.",
         );
       }
+
+      if (name === WORKFLOW_ON_SELECTED) {
+        for (const callback of callbackBodies(node.initializer)) {
+          if (!callback.body) continue;
+          walkForSelfAcknowledgement(callback.body);
+        }
+      }
     }
 
     if (
@@ -348,6 +476,10 @@ export function scanPersonaWorkflowSource(
         PICKER_ON_SELECT,
         "Remove the empty picker callback; selection is returned by the persona workflow.",
       );
+    }
+
+    if (ts.isMethodDeclaration(node) && propertyNameText(node.name) === WORKFLOW_ON_SELECTED && node.body) {
+      walkForSelfAcknowledgement(node.body);
     }
 
     ts.forEachChild(node, visit);

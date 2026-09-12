@@ -1,10 +1,10 @@
 /**
- * Registration coverage for the Wave 1 slice 1 direct moves: /tool ping -> /ping,
- * /tool comment -> /comment, /bot kill -> /kill. Neither `tool` nor `bot` sits in
+ * Registration coverage for the direct moves of /tool ping to /ping, /tool comment
+ * to /comment, and /bot kill to /kill. Neither `tool` nor `bot` sits in
  * GUILD_ONLY_CATEGORIES/MANAGER_ONLY_CATEGORIES (commandLoader.ts), so these three
  * commands carried no restriction before the move and must carry none after it;
- * a category-inherited restriction disappearing silently is this wave's dominant
- * failure mode, so it is asserted here rather than left implicit.
+ * a category-inherited restriction disappearing silently is the dominant failure
+ * mode for a direct move, so it is asserted here rather than left implicit.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { SlashCommandBuilder } from "discord.js";

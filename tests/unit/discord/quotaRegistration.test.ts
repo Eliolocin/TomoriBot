@@ -3,9 +3,9 @@
  * outside the implementation slices so a command that clears other members' usage counters cannot lose its
  * guild and manager restrictions.
  *
- * The former "no quota command survives under /server" check here is gone: /server itself dissolved
- * once its own last leaves moved to /export and /import, and that dissolution is asserted once, for
- * every fully dissolved root, by configRegistration.test.ts's DISSOLVED_ROOTS list.
+ * The former "no quota command survives under /server" check here is gone: /server is listed in
+ * configRegistration.test.ts's DISSOLVED_ROOTS, which asserts it is absent from both the execution map
+ * and the registration data.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { PermissionsBitField } from "discord.js";

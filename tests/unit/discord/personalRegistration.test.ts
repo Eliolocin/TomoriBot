@@ -16,9 +16,7 @@ describe("/personal registration", () => {
     expect([...personal.keys()].sort()).toEqual(["config", "memories", "nuke", "providers"]);
   }, 30000);
 
-  // The legacy `/memory` root this Wave 5 slice partially dissolved (personal CRUD gone, transfer
-  // leaves kept) is now gone outright: the transfer leaves it retained moved to /export and /import
-  // in Wave 7, leaving no enabled subcommand behind. Full dissolution of a root is asserted once, for
-  // every such root, by configRegistration.test.ts's DISSOLVED_ROOTS list, so this file no longer
-  // restates it.
+  // `/memory` is dissolved outright: its transfer leaves moved to /export and /import, leaving no
+  // enabled subcommand behind. Dissolution is asserted by root in configRegistration's DISSOLVED_ROOTS,
+  // so this file does not restate it.
 });

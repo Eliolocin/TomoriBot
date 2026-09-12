@@ -5216,7 +5216,7 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
   });
 });
 
-describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () => {
+describe("Stable spotlight identity and destructive safety", () => {
   it("detects persona inserted before selected position and fails stale with zero writes or telemetry", async () => {
     const calls: string[] = [];
     const initialPersonas = [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")];
@@ -6240,7 +6240,7 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
   });
 });
 
-describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 Phase 2a)", () => {
+describe("Personal Spotlight auto-trigger and range chooser", () => {
   it("assigns single selected persona directly as auto-trigger without modal", async () => {
     let modalOpened = false;
     let repaintedPayload: unknown = null;
@@ -6680,7 +6680,7 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
   });
 });
 
-describe("Wave 5 Phase 2b: persona reachability beyond one modal", () => {
+describe("Persona reachability beyond one modal", () => {
   const makeBlockPersonas = (count: number) =>
     Array.from({ length: count }, (_, i) => ({ id: 100 + i, name: `Persona ${i + 1}`, isAlter: false }));
 
@@ -7683,7 +7683,7 @@ describe("Pre-defer dispatch, fall-throughs, and acknowledgement timing", () => 
     expect(renderedText).toContain("Your personal spotlight has been saved for <#123456789012345678>.");
   });
 
-  describe("Wave 6 Slice A3: Model Randomizer and Cross-Server STM state controls", () => {
+  describe("Model Randomizer and Cross-Server STM state controls", () => {
     describe("Cross-Server STM state control rendering and custom IDs", () => {
       it("renders Off as disabled Primary and On as enabled Secondary when cross-server STM is off", () => {
         const payload = buildPersonalConfigPanelPayload({
@@ -8366,7 +8366,7 @@ describe("Pre-defer dispatch, fall-throughs, and acknowledgement timing", () => 
     });
   });
 
-  describe("Wave 6 Slice B5: Migrate Spotlight Overflow onto the Block Selector", () => {
+  describe("Spotlight overflow on the block selector", () => {
     const makeBlockPersonas = (count: number) =>
       Array.from({ length: count }, (_, i) => ({ id: 100 + i, name: `Persona ${i + 1}`, isAlter: false }));
 

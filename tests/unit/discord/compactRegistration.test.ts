@@ -1,7 +1,7 @@
 /**
- * Registration coverage for the Wave 1 slice 6 direct move: /tool compact -> /compact.
+ * Registration coverage for the direct move of /tool compact to /compact.
  * Tool sits in neither GUILD_ONLY_CATEGORIES nor MANAGER_ONLY_CATEGORIES (commandLoader.ts),
- * so /compact carries no restriction before the move and must carry none after it.
+ * so /compact carried no restriction before the move and must carry none after it.
  * This test asserts through the real loadCommandData() that /compact is registered as an
  * unrestricted bare root, the old /tool compact leaf is removed, and /tool retains its
  * surviving members.

@@ -49,10 +49,10 @@ describe("/memories registration restrictions", () => {
     expect([...(executionMap.get("memories")?.keys() ?? [])]).toEqual([ROOT_COMMAND_EXECUTION_KEY]);
   }, 30000);
 
-  // The legacy `/memory` root this Wave 5 slice partially dissolved (CRUD gone, transfer leaves kept)
-  // is now gone outright: the transfer leaves it retained moved to /export and /import in Wave 7,
-  // leaving no enabled subcommand behind. Full dissolution of a root is asserted once, for every such
-  // root, by configRegistration.test.ts's DISSOLVED_ROOTS list, so this file no longer restates it.
+  // `/memory` is dissolved outright: its transfer leaves moved to /export and /import, leaving no
+  // enabled subcommand behind. Dissolution is asserted by root in configRegistration's DISSOLVED_ROOTS,
+  // so this file does not restate it. What the two tests above protect is `/memories` itself: the bare
+  // root and its absent manager default, neither of which any other file asserts.
 });
 
 /**

@@ -24,7 +24,7 @@ const STRING_TYPE = 3;
 const ATTACHMENT_TYPE = 11;
 const BOT_DM_CONTEXT = 1;
 
-/** The eight leaves the fixed Wave 7 product boundary names. */
+/** The eight leaves the portable-transfer product boundary names. */
 const EXPECTED_PATHS = [
   "export config",
   "export memories",
@@ -69,7 +69,7 @@ beforeAll(async () => {
   commandData = await loadCommandData();
 });
 
-describe("transfer command registration", () => {
+describe("export and import command registration", () => {
   it("registers both roots with exactly the eight portable transfer leaves", () => {
     const exportRoot = findRoot(commandData.registrationData, "export");
     const importRoot = findRoot(commandData.registrationData, "import");
