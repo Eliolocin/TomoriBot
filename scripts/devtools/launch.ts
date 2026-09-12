@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { config } from "dotenv";
 import pc from "picocolors";
 import { resolvePythonExe } from "../lib/pyenv";
+import { DEFAULT_PYTHON_HEALTH_TIMEOUT_MS, resolvePositiveTimeoutMs } from "../lib/launchReadiness";
 
 config();
 
@@ -331,7 +332,10 @@ async function startPythonSidecar(
     venvRelPath,
     scriptRelPath,
     scriptArgs = [],
-    healthTimeoutMs = Number.parseInt(process.env.TOMORI_TTS_STARTUP_TIMEOUT_MS ?? "300000", 10),
+    healthTimeoutMs = resolvePositiveTimeoutMs(
+      process.env.TOMORI_TTS_STARTUP_TIMEOUT_MS,
+      DEFAULT_PYTHON_HEALTH_TIMEOUT_MS,
+    ),
   } = def;
   const label = pc.magenta(`[${displayName}]`);
 

@@ -135,6 +135,7 @@ def load_model() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    validate_bind_policy()
     load_model()
     yield
 
@@ -230,5 +231,4 @@ def synthesize(
 
 
 if __name__ == "__main__":
-    validate_bind_policy()
     uvicorn.run(app, host=HOST, port=PORT)

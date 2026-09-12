@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import unittest
 import wave
+from unittest.mock import patch
 
 import numpy as np
 
@@ -118,6 +120,28 @@ class VoxCpmContractTests(unittest.TestCase):
 
       server.ALLOW_REMOTE_BIND = True
       server.validate_bind_policy()
+    finally:
+      server.HOST = previous_host
+      server.API_KEY = previous_key
+      server.ALLOW_REMOTE_BIND = previous_opt_in
+
+  def test_remote_bind_policy_runs_before_model_load_in_lifespan(self) -> None:
+    previous_host = server.HOST
+    previous_key = server.API_KEY
+    previous_opt_in = server.ALLOW_REMOTE_BIND
+    try:
+      server.HOST = "0.0.0.0"
+      server.API_KEY = ""
+      server.ALLOW_REMOTE_BIND = False
+
+      async def start_application() -> None:
+        async with server.lifespan(server.app):
+          pass
+
+      with patch.object(server, "load_model") as load_model:
+        with self.assertRaises(RuntimeError):
+          asyncio.run(start_application())
+        load_model.assert_not_called()
     finally:
       server.HOST = previous_host
       server.API_KEY = previous_key
