@@ -222,4 +222,12 @@ describe("tool schema assembly", () => {
     expect(getPropertyNames(tool)).toEqual(["script", "title", "voice_instructions"]);
     expect(tool.description).toContain("voice design prompt");
   });
+
+  it("assembles generate_voice_message with instructions for capable clone endpoints", () => {
+    const tool = buildVoiceMessageToolVariant(new GenerateVoiceMessageTool(), "bracket-tags", true);
+
+    expect(getPropertyNames(tool)).toEqual(["script", "title", "voice_instructions"]);
+    expect(tool.description).toContain("natural-language delivery direction");
+    expect(tool.parameters.properties.voice_instructions.description).toContain("one-off delivery direction");
+  });
 });
