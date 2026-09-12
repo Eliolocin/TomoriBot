@@ -81,9 +81,8 @@ Run in your test server:
 
 The command requires **Manage Server** and answers with a private checklist panel that only you can
 operate. Its items are a draft: **Finish Setup** is the only control that writes, so opening, editing,
-cancelling, or letting the draft expire leaves the database untouched. A draft is process-local, so a
-restart discards it too; `SETUP_DRAFT_TTL_MINUTES` (default 15) and `SETUP_DRAFT_MAX_ENTRIES`
-(default 200) are in `.env.optional.example`.
+or cancelling leaves the database untouched. A draft is process-local, so a restart discards it too;
+`SETUP_DRAFT_MAX_ENTRIES` (default 200) bounds pending drafts in `.env.optional.example`.
 
 Under `RUN_ENV=development` the panel renders two steps:
 

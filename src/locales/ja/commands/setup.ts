@@ -86,5 +86,16 @@ export default {
     already_setup_description: `このサーバーでは既に設定が完了しています。設定を変更するには、\`/config\`、\`/persona\`、\`/memories\`などの他のコマンドを使用してください。
 
 				プロバイダーを変更したい場合は、\`/providers\`で新しいデフォルトのテキストプロバイダーを登録して有効化してください。`,
+    wizard: {
+      title: `TomoriBotをセットアップ`,
+      policies_name: `ポリシー`,
+      provider_name: `AIプロバイダー`,
+      provider_option_byok: `ユーザーBYOK（上級者向け）`,
+      settings_name: `初期設定`,
+      session_ended_title: `セットアップセッションが終了しました`,
+      session_ended_description: `このセットアップセッションは利用できなくなりました。\`/setup\` でもう一度始めてください。`,
+      catalog_api_key_help: `APIキーの入手方法がわからない場合は、{help} を開いて「セットアップ」>「ステップ1」を確認してください。`,
+      byok_modal_notice: `ユーザーBYOKを有効にすると、このサーバーのユーザーは返信に自分で保存したプロバイダーを使用します。このサーバーのプロバイダーには切り替わりません。{command} から設定できます。[ユーザーBYOKについて詳しく見る](https://docs.tomoribot.app/ja/features/setup-administration/server-moderation/#user-byok-bring-your-own-key)`,
+    },
   },
 };

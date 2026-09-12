@@ -102,12 +102,11 @@ rather than through a collector.
 
 - The custom ID carries only the action, the locale, and an opaque nonce. The nonce resolves a bounded
   process-local draft (`setupDraftStore.ts`) bound to the actor, the workspace, and the guild-or-DM
-  context, so the panel outlives the command invocation but not the process. `SETUP_DRAFT_TTL_MINUTES`
-  and `SETUP_DRAFT_MAX_ENTRIES` bound that life, and opening, editing, cancelling, expiring, or
-  restarting the process writes nothing.
+  context, so the panel outlives the command invocation but not the process. `SETUP_DRAFT_MAX_ENTRIES`
+  bounds pending drafts, and opening, editing, cancelling, or restarting the process writes nothing.
 - Every routed action rechecks the owner, the workspace, the context, `Manage Server`, the step set the
-  environment renders, and the draft's expiry before it acts. A stale or forged nonce answers with the
-  terminal expired payload instead of repainting.
+  environment renders before it acts. A stale or forged nonce answers with the terminal session-ended
+  payload instead of repainting.
 - The step set is captured in the draft, so a draft created under one environment cannot complete a step
   the other environment renders.
 - `Finish Setup` acknowledges the interaction before it claims the draft, because the claim, the catalog

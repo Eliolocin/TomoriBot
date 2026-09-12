@@ -64,6 +64,7 @@ import { configRepository, llmModelRepo, personaRepository, serverRepository } f
 import type { SystemPromptPresetRow, TomoriPresetRow } from "@/types/db/schema";
 import { dispatchGlobalInteraction } from "@/utils/discord/interactions/router";
 import type { GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
+import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 import { ProviderFactory } from "@/utils/provider/providerFactory";
 import * as cryptoModule from "@/utils/security/crypto";
@@ -459,7 +460,7 @@ describe("setupWizardRoutes", () => {
     expect(mockStore).not.toHaveBeenCalled();
   });
 
-  it("returns terminal expired response for stale or forged nonce without repainting panel", async () => {
+  it("returns terminal session-ended response for stale or forged nonce without repainting panel", async () => {
     const forgedCustomId = buildSetupDashboardRouteId({ locale: "en-US", nonce: "forged-nonce-1" });
     const interaction = makeMockInteraction({ customId: forgedCustomId });
 
@@ -469,7 +470,7 @@ describe("setupWizardRoutes", () => {
 
     const updatePayload = interaction.updateCalls[0] as { components: unknown[] };
     const payloadStr = JSON.stringify(updatePayload);
-    expect(payloadStr).toContain(localizer("en-US", "commands.setup.wizard.expired_title"));
+    expect(payloadStr).toContain(localizer("en-US", "commands.setup.wizard.session_ended_title"));
     expect(payloadStr).not.toContain(localizer("en-US", "commands.setup.wizard.title"));
   });
 
@@ -578,12 +579,12 @@ describe("setupWizardRoutes", () => {
     const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
     expect(check.status).toBe("missing");
 
-    // Second click returns expired session
+    // A consumed session cannot be used again.
     const secondInteraction = makeMockInteraction({ customId });
     await dispatchGlobalInteraction({} as Client, secondInteraction);
     expect(secondInteraction.updateCalls.length).toBe(1);
     const secondStr = JSON.stringify(secondInteraction.updateCalls[0]);
-    expect(secondStr).toContain(localizer("en-US", "commands.setup.wizard.expired_title"));
+    expect(secondStr).toContain(localizer("en-US", "commands.setup.wizard.session_ended_title"));
   });
 
   it("opens raw modal and writes nothing to draft when selecting user-byok in a guild", async () => {
@@ -865,9 +866,14 @@ describe("setupWizardRoutes", () => {
     }
   });
 
-  it("opens raw modal and writes nothing to draft when selecting catalog mode", async () => {
+  it("opens raw modal and clears a custom endpoint draft when selecting catalog mode", async () => {
     const nonce = "nonce-cat-modal-1";
-    storeSetupDraft(nonce, makeDraft({ providerAccess: null }));
+    storeSetupDraft(
+      nonce,
+      makeDraft({
+        providerAccess: { mode: "custom-endpoint", connection: null, textModel: null },
+      }),
+    );
 
     let openedModal: { custom_id: string; title: string; components: unknown[] } | null = null;
     const modalSpy = spyOn(modalModule, "showRoutedRawModal").mockImplementation(async (_interaction, modal) => {
@@ -904,9 +910,13 @@ describe("setupWizardRoutes", () => {
 
     expect(modal.custom_id).toBe(buildSetupProviderCatalogSubmitRouteId({ locale: "en-US", nonce }));
     expect(modal.title).toBe(localizer("en-US", "commands.setup.wizard.catalog_modal_title"));
-    expect(modal.components.length).toBe(2);
+    expect(modal.components.length).toBe(3);
 
-    const row1 = modal.components[0] as {
+    const help = modal.components[0] as { type: number; content?: string };
+    expect(help.type).toBe(10);
+    expect(help.content).toContain(commandRegistry.getCommandMention("help"));
+
+    const row1 = modal.components[1] as {
       type: number;
       component?: { type: number; custom_id?: string; options?: Array<{ value: string }> };
     };
@@ -924,7 +934,7 @@ describe("setupWizardRoutes", () => {
     expect(optionValues).not.toContain("brave");
     expect(optionValues).not.toContain("custom");
 
-    const row2 = modal.components[1] as {
+    const row2 = modal.components[2] as {
       type: number;
       component?: { type: number; custom_id?: string; style: number };
     };
@@ -1898,7 +1908,7 @@ describe("setupWizardRoutes", () => {
     }
   });
 
-  it("answers with the expired state when the draft is gone before the write lands", async () => {
+  it("answers with the session-ended state when the draft is gone before the write lands", async () => {
     const nonce = "settings-gone";
     process.env.RUN_ENV = "production";
     storeSetupDraft(nonce, makeDraft({ requiresPolicies: true }));
@@ -1922,7 +1932,7 @@ describe("setupWizardRoutes", () => {
       expect(updateSpy).toHaveBeenCalledTimes(1);
       expect(interaction.editReplyCalls.length).toBe(1);
       const repainted = JSON.stringify(interaction.editReplyCalls[0]);
-      expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.expired_title"));
+      expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.session_ended_title"));
       expect(repainted).not.toContain(localizer("en-US", "commands.setup.wizard.policies_completed"));
       expect(interaction.updateCalls.length).toBe(0);
     } finally {
@@ -2976,7 +2986,7 @@ describe("setupWizardFinish", () => {
 
       expect(stubs.setupSpy).toHaveBeenCalledTimes(1);
       // Drained rather than left frozen, so a later press reads the terminal state instead of
-      // "already being saved" until the TTL expires with the credential still held in memory.
+      // "already being saved" while a credential remains in memory.
       expect(readSetupDraft(COMMIT_NONCE, "actor-1", "guild-1", "guild").status).toBe("missing");
     } finally {
       stubs.restore();
@@ -3010,14 +3020,14 @@ describe("setupWizardFinish", () => {
 
       expect(stubs.setupSpy).toHaveBeenCalledTimes(1);
       // Drained rather than left frozen: a later press reads the terminal state instead of
-      // "already being saved" until the TTL expires.
+      // "already being saved" after the commit exits.
       expect(readSetupDraft(COMMIT_NONCE, "actor-1", "guild-1", "guild").status).toBe("missing");
     } finally {
       stubs.restore();
     }
   });
 
-  it("answers a repeated final submit with the expired state and commits nothing", async () => {
+  it("answers a repeated final submit with the session-ended state and commits nothing", async () => {
     const stubs = stubCommitDependencies();
 
     try {
@@ -3033,7 +3043,7 @@ describe("setupWizardFinish", () => {
       expect(stubs.setupSpy).toHaveBeenCalledTimes(1);
       // A consumed nonce is a missing draft, which the route answers by editing the anchor in place.
       expect(JSON.stringify(second.updateCalls[0])).toContain(
-        localizer("en-US", "commands.setup.wizard.expired_title"),
+        localizer("en-US", "commands.setup.wizard.session_ended_title"),
       );
       expect(stubs.panelActionSpy).toHaveBeenCalledTimes(1);
     } finally {

@@ -1,16 +1,10 @@
 import type { SetupDraftContext, SetupDraftProviderAccess, SetupDraftRecord } from "@/types/discord/setupWizard";
 
-const parsedSetupDraftTtlMinutes = Number.parseInt(process.env.SETUP_DRAFT_TTL_MINUTES || "15", 10);
-export const SETUP_DRAFT_TTL_MINUTES =
-  Number.isFinite(parsedSetupDraftTtlMinutes) && parsedSetupDraftTtlMinutes > 0 ? parsedSetupDraftTtlMinutes : 15;
-const SETUP_DRAFT_TTL_MS = SETUP_DRAFT_TTL_MINUTES * 60 * 1000;
-
 const parsedSetupDraftMaxEntries = Number.parseInt(process.env.SETUP_DRAFT_MAX_ENTRIES || "200", 10);
 export const SETUP_DRAFT_MAX_ENTRIES =
   Number.isFinite(parsedSetupDraftMaxEntries) && parsedSetupDraftMaxEntries > 0 ? parsedSetupDraftMaxEntries : 200;
 
 export interface SetupDraftStoreEntry extends SetupDraftRecord {
-  expiresAt: number;
   writeClaimed?: boolean;
 }
 
@@ -104,17 +98,8 @@ function wipeDisplacedProviderAccessSecrets(
   }
 }
 
-export function createSetupDraftStore(now: () => number = Date.now): SetupDraftStore {
+export function createSetupDraftStore(_now: () => number = Date.now): SetupDraftStore {
   const drafts = new Map<string, SetupDraftStoreEntry>();
-
-  const sweepExpired = (currentTime: number): void => {
-    for (const [nonce, draft] of drafts) {
-      if (draft.expiresAt < currentTime) {
-        wipeProviderAccessSecrets(draft.providerAccess);
-        drafts.delete(nonce);
-      }
-    }
-  };
 
   const matchesBinding = (
     draft: SetupDraftStoreEntry,
@@ -144,12 +129,6 @@ export function createSetupDraftStore(now: () => number = Date.now): SetupDraftS
   ): SetupDraftReadResult => {
     const draft = drafts.get(nonce);
     if (!draft) return { status: "missing" };
-
-    if (draft.expiresAt < now()) {
-      wipeProviderAccessSecrets(draft.providerAccess);
-      drafts.delete(nonce);
-      return { status: "missing" };
-    }
 
     if (!matchesBinding(draft, actorDiscId, workspaceKey, context)) return { status: "forbidden" };
     if (draft.writeClaimed && !options.allowClaimed) return { status: "in-flight" };
@@ -186,7 +165,6 @@ export function createSetupDraftStore(now: () => number = Date.now): SetupDraftS
       wipeDisplacedProviderAccessSecrets(result.draft.providerAccess, patch.providerAccess);
     }
 
-    // State updates never extend expiresAt, so a wizard still ends at its original deadline.
     const updatedDraft: SetupDraftStoreEntry = { ...result.draft, ...patch };
     drafts.set(nonce, updatedDraft);
     return { status: "ok", draft: updatedDraft };
@@ -233,8 +211,6 @@ export function createSetupDraftStore(now: () => number = Date.now): SetupDraftS
 
   return {
     storeSetupDraft: (nonce, record) => {
-      const currentTime = now();
-      sweepExpired(currentTime);
       const existing = drafts.get(nonce);
       if (existing) {
         wipeDisplacedProviderAccessSecrets(existing.providerAccess, record.providerAccess);
@@ -247,7 +223,7 @@ export function createSetupDraftStore(now: () => number = Date.now): SetupDraftS
         if (oldest) wipeProviderAccessSecrets(oldest.providerAccess);
         drafts.delete(oldestNonce);
       }
-      drafts.set(nonce, { ...record, expiresAt: currentTime + SETUP_DRAFT_TTL_MS });
+      drafts.set(nonce, record);
     },
     readSetupDraft: read,
     consumeSetupDraft: consume,

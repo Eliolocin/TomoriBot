@@ -111,7 +111,7 @@
       database_unavailable_title: `Database Unreachable`,
       database_unavailable_description: `I could not reach my database just now, so I do not know how this server is configured. Nothing is broken and no settings were changed. Please try again in a moment.`,
       personal_provider_required_title: `Personal Provider Required`,
-      personal_provider_required_description: `This server is using member-provided AI access for user-triggered messages. Open \`/help\` to **Features**, then **Personal Providers**, and run \`/personal providers\` to set up your own provider.`,
+      personal_provider_required_description: `Set up your provider with \`/personal providers\`, then use \`/personal config\` to choose it for text replies. This server is using member-provided AI access for user-triggered messages. Open \`/help\` to **Features**, then **Personal Providers** if you need help.`,
       personal_provider_credentials_error_title: `Personal Provider Error`,
       personal_provider_credentials_error_description: `Your enabled personal provider could not be used. Update it with \`/personal providers\` or select another model with \`/personal config\`.`,
       context_error_title: `Context Building Error`,

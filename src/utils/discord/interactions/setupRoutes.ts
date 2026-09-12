@@ -1389,6 +1389,11 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         }
         const selectedMode = interaction.values[0];
         if (selectedMode === "catalog") {
+          const cleared = updateSetupDraft(nonce, actorDiscId, workspaceKey, context, { providerAccess: null });
+          if (cleared.status !== "ok") {
+            await applySetupDraftWrite(interaction, cleared, locale, nonce, "update");
+            return;
+          }
           const modalPayload = buildSetupCatalogModal(locale, nonce);
           await showRoutedRawModal(interaction, modalPayload);
           return;

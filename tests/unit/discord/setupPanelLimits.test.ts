@@ -118,8 +118,8 @@ describe("setupPanel Components V2 layout and limits", () => {
     });
 
     const [header] = extractAllText(payload);
-    expect(header).toStartWith("### Set Up TomoriBot\n");
-    expect(header).not.toContain("### ###");
+    expect(header).toStartWith("## Set Up TomoriBot\n");
+    expect(header).not.toContain("## ##");
   });
 
   it("renders three requirements in production and exactly two in non-production", () => {
@@ -569,7 +569,7 @@ describe("setupPanel Components V2 layout and limits", () => {
     expect(json).not.toContain("Buffer");
   });
 
-  it("validates cancelled and expired terminal payloads", () => {
+  it("validates cancelled and session-ended terminal payloads", () => {
     const cancelled = buildSetupCancelledPayload("en-US");
     const cancelledValidation = validateComponentsV2MessageLimits(cancelled);
     expect(cancelledValidation.valid).toBe(true);

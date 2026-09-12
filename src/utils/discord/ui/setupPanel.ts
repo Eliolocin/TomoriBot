@@ -300,8 +300,8 @@ export function buildSetupWizardPayload(
   components.push({
     type: ComponentType.TextDisplay,
     content: isComplete
-      ? `### ${localizer(locale, "commands.setup.wizard.title")}\n${localizer(locale, "commands.setup.wizard.intro_ready")}\n${localizer(locale, "commands.setup.wizard.progress", { done, total })}`
-      : `### ${localizer(locale, "commands.setup.wizard.title")}\n${localizer(locale, "commands.setup.wizard.intro")}\n${localizer(locale, "commands.setup.wizard.progress", { done, total })}`,
+      ? `## ${localizer(locale, "commands.setup.wizard.title")}\n${localizer(locale, "commands.setup.wizard.intro_ready")}\n${localizer(locale, "commands.setup.wizard.progress", { done, total })}`
+      : `## ${localizer(locale, "commands.setup.wizard.title")}\n${localizer(locale, "commands.setup.wizard.intro")}\n${localizer(locale, "commands.setup.wizard.progress", { done, total })}`,
   });
 
   if (isHosted) {
@@ -316,7 +316,7 @@ export function buildSetupWizardPayload(
 
     components.push({
       type: ComponentType.TextDisplay,
-      content: `${policiesStatus} **${localizer(locale, "commands.setup.wizard.policies_name")}**\n${localizer(locale, "commands.setup.wizard.policies_description")}\n> ${policiesQuote}`,
+      content: `### ${policiesStatus} ${localizer(locale, "commands.setup.wizard.policies_name")}\n${localizer(locale, "commands.setup.wizard.policies_description")}\n> ${policiesQuote}`,
     });
 
     components.push({
@@ -340,7 +340,7 @@ export function buildSetupWizardPayload(
   });
   components.push({
     type: ComponentType.TextDisplay,
-    content: `${providerStatus} **${localizer(locale, "commands.setup.wizard.provider_name")}**\n${localizer(locale, "commands.setup.wizard.provider_description")}\n${providerSummary}\n-# ${providerHint}`,
+    content: `### ${providerStatus} ${localizer(locale, "commands.setup.wizard.provider_name")}\n${localizer(locale, "commands.setup.wizard.provider_description")}\n${providerSummary}\n-# ${providerHint}`,
   });
 
   const providerOptions: SelectMenuComponentOptionData[] = [
@@ -440,7 +440,7 @@ export function buildSetupWizardPayload(
 
   components.push({
     type: ComponentType.TextDisplay,
-    content: `${settingsStatus} **${localizer(locale, "commands.setup.wizard.settings_name")}**\n${localizer(locale, "commands.setup.wizard.settings_description")}\n${settingsSummary}`,
+    content: `### ${settingsStatus} ${localizer(locale, "commands.setup.wizard.settings_name")}\n${localizer(locale, "commands.setup.wizard.settings_description")}\n${settingsSummary}`,
   });
 
   components.push({
@@ -531,7 +531,7 @@ export function buildSetupCommitFailedPayload(
 /**
  * Answer for a control pressed while this draft is being committed.
  *
- * It is not the expired state: the draft still exists and the commit in progress is about to replace
+ * It is not the session-ended state: the draft still exists and the commit in progress is about to replace
  * this message, so the copy tells the actor to wait rather than to start over.
  */
 export function buildSetupInFlightPayload(locale: string): ComponentsV2MessagePayload & { attachments: readonly [] } {
@@ -676,8 +676,8 @@ export function buildSetupExpiredPayload(locale: string): ComponentsV2MessagePay
       components: buildNoticeContainer({
         locale,
         color: ColorCode.WARN,
-        titleKey: "commands.setup.wizard.expired_title",
-        descriptionKey: "commands.setup.wizard.expired_description",
+        titleKey: "commands.setup.wizard.session_ended_title",
+        descriptionKey: "commands.setup.wizard.session_ended_description",
       }),
       attachments: [],
       flags: MessageFlags.IsComponentsV2,
@@ -713,6 +713,12 @@ export function buildSetupCatalogModal(
     custom_id: buildSetupProviderCatalogSubmitRouteId({ locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.setup.wizard.catalog_modal_title"), 45),
     components: [
+      {
+        type: 10,
+        content: localizer(locale, "commands.setup.wizard.catalog_api_key_help", {
+          help: commandRegistry.getCommandMention("help"),
+        }),
+      },
       {
         type: 18,
         label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.catalog_provider_label"), 45),

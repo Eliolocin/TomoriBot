@@ -116,9 +116,9 @@ export function collectProseWidthViolations(node: unknown, besideThumbnail = fal
 /**
  * Locale keys rendered into a `TextDisplay` body, per panel file.
  *
- * Only `content:` values are collected. Modal field labels and descriptions are laid out by
- * Discord inside the modal and never widen the panel container, so they are out of scope even
- * though the same files build them.
+ * Only Components V2 `TextDisplay` content is collected. Raw modal text displays, field labels,
+ * and descriptions are laid out by Discord inside the modal and never widen the panel container,
+ * so they are out of scope even though the same files build them.
  */
 function collectTextDisplayKeys(): Map<string, string[]> {
   const byFile = new Map<string, string[]>();
@@ -132,7 +132,9 @@ function collectTextDisplayKeys(): Map<string, string[]> {
         keys.add(call[1]);
       }
     }
-    for (const direct of source.matchAll(/content:\s*localizer\(\s*[A-Za-z0-9_.]+\s*,\s*"([a-z0-9_.-]+)"/g)) {
+    for (const direct of source.matchAll(
+      /type:\s*ComponentType\.TextDisplay\s*,\s*content:\s*localizer\(\s*[A-Za-z0-9_.]+\s*,\s*"([a-z0-9_.-]+)"/g,
+    )) {
       keys.add(direct[1]);
     }
 

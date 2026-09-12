@@ -89,7 +89,7 @@ provider answers instead, so this is the last step of every install path.
 `/setup` opens an ephemeral checklist panel that only the person who ran it can operate. In a server
 it requires **Manage Server**; in a DM it is available to that person's own workspace. Every row on
 the panel is a draft value: **Finish Setup** is the only control that writes anything, so opening,
-editing, cancelling, restarting, or letting the draft expire leaves every database row untouched.
+editing, cancelling, or restarting leaves every database row untouched.
 
 | Step | Appears | What it collects |
 |---|---|---|
@@ -128,16 +128,16 @@ stores no prompt text at all, so it keeps tracking the shipped default, and a pr
 that preset's text as it reads at commit time. Deleting a stored persona or prompt from the catalog
 re-opens the step until another is chosen.
 
-### Finishing, cancelling, and expiry
+### Finishing and cancelling
 
 **Finish Setup** stays disabled until every rendered step is complete. It revalidates the catalogs and
 the workspace state, commits the whole draft in one transaction, and replaces the panel with the
 receipt. **Cancel** discards the draft and expires every control on the panel.
 
-A draft lives in the bot process, not in the database, so it also ends when the process restarts. It
-expires after `SETUP_DRAFT_TTL_MINUTES` (default 15), and at most `SETUP_DRAFT_MAX_ENTRIES` (default
-200) drafts are held at once. Both are documented in `.env.optional.example` under
-**Setup wizard drafts**. An expired control answers with the expired state and writes nothing.
+A draft lives in the bot process, not in the database, so it ends only when it is cancelled,
+completed, or the process restarts. At most `SETUP_DRAFT_MAX_ENTRIES` (default 200) drafts are held
+at once; the oldest is discarded at the cap. It is documented in `.env.optional.example` under
+**Setup wizard drafts**. A control for a session that is no longer available writes nothing.
 
 ## Updating
 

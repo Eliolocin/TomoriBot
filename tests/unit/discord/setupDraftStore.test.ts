@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 import { SETUP_DRAFT_SCHEMA_VERSION } from "@/types/discord/setupWizard";
 import {
   SETUP_DRAFT_MAX_ENTRIES,
-  SETUP_DRAFT_TTL_MINUTES,
   createSetupDraftStore,
   type SetupDraftRecordInput,
 } from "@/utils/discord/interactions/setupDraftStore";
@@ -99,10 +98,7 @@ describe("setup draft store", () => {
 
     store.storeSetupDraft("nonce-1234", draft);
 
-    expect(store.readSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild")).toEqual({
-      status: "ok",
-      draft: { ...draft, expiresAt: 1000 + SETUP_DRAFT_TTL_MINUTES * 60 * 1000 },
-    });
+    expect(store.readSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild")).toEqual({ status: "ok", draft });
   });
 
   it("refuses a different actor without consuming the draft", () => {
@@ -135,49 +131,35 @@ describe("setup draft store", () => {
     expect(store.readSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild").status).toBe("ok");
   });
 
-  it("returns missing after expiry", () => {
+  it("keeps a draft available without a timeout", () => {
     let currentTime = 1000;
     const store = createSetupDraftStore(() => currentTime);
     store.storeSetupDraft("nonce-1234", makeDraft());
-    currentTime += SETUP_DRAFT_TTL_MINUTES * 60 * 1000 + 1;
+    currentTime += 365 * 24 * 60 * 60 * 1000;
 
-    expect(store.readSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild")).toEqual({
-      status: "missing",
-    });
+    expect(store.readSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild")).toMatchObject({ status: "ok" });
   });
 
-  it("does not extend expiry after a state mutation", () => {
+  it("keeps a draft available after a state mutation", () => {
     let currentTime = 1000;
     const store = createSetupDraftStore(() => currentTime);
     store.storeSetupDraft("nonce-1234", makeDraft());
-    const deadline = 1000 + SETUP_DRAFT_TTL_MINUTES * 60 * 1000;
-    currentTime = deadline - 1;
+    currentTime += 365 * 24 * 60 * 60 * 1000;
 
     expect(
       store.updateSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild", {
         policiesAccepted: true,
       }),
-    ).toMatchObject({ status: "ok", draft: { expiresAt: deadline } });
-    currentTime = deadline + 1;
-    expect(store.readSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild")).toEqual({
-      status: "missing",
-    });
+    ).toMatchObject({ status: "ok", draft: { policiesAccepted: true } });
+    expect(store.readSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild")).toMatchObject({ status: "ok" });
   });
 
-  it("does not create state for an unknown or expired nonce", () => {
-    let currentTime = 1000;
-    const store = createSetupDraftStore(() => currentTime);
+  it("does not create state for an unknown nonce", () => {
+    const store = createSetupDraftStore();
 
     expect(store.updateSetupDraft("unknown", "actor-1", "workspace-1", "guild", { policiesAccepted: true })).toEqual({
       status: "missing",
     });
-    expect(store.getSetupDraftCount()).toBe(0);
-
-    store.storeSetupDraft("nonce-1234", makeDraft());
-    currentTime += SETUP_DRAFT_TTL_MINUTES * 60 * 1000 + 1;
-    expect(store.updateSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild", { policiesAccepted: true })).toEqual(
-      { status: "missing" },
-    );
     expect(store.getSetupDraftCount()).toBe(0);
   });
 
@@ -234,25 +216,21 @@ describe("setup draft store", () => {
     expect(store.claimSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild").status).toBe("claimed");
   });
 
-  it("does not extend expiry when a claim is taken or released", () => {
+  it("keeps a claim available without a timeout", () => {
     let currentTime = 1000;
     const store = createSetupDraftStore(() => currentTime);
     store.storeSetupDraft("nonce-1234", makeDraft());
-    const deadline = 1000 + SETUP_DRAFT_TTL_MINUTES * 60 * 1000;
-    currentTime = deadline - 1;
+    currentTime += 365 * 24 * 60 * 60 * 1000;
 
     expect(store.claimSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild")).toMatchObject({
       status: "claimed",
-      draft: { expiresAt: deadline },
+      draft: { writeClaimed: true },
     });
     expect(store.releaseSetupDraftClaim("nonce-1234", "actor-1", "workspace-1", "guild")).toMatchObject({
       status: "ok",
-      draft: { expiresAt: deadline },
+      draft: { writeClaimed: false },
     });
-    currentTime = deadline + 1;
-    expect(store.claimSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild")).toEqual({
-      status: "missing",
-    });
+    expect(store.claimSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild")).toMatchObject({ status: "claimed" });
   });
 
   it("reports an unknown nonce as missing rather than creating a claim", () => {
@@ -283,15 +261,15 @@ describe("setup draft store", () => {
     ).toBe("ok");
   });
 
-  it("sweeps expired entries during a later write", () => {
+  it("keeps existing drafts when another draft is stored", () => {
     let currentTime = 1000;
     const store = createSetupDraftStore(() => currentTime);
     store.storeSetupDraft("nonce-1234", makeDraft());
-    currentTime += SETUP_DRAFT_TTL_MINUTES * 60 * 1000 + 1;
+    currentTime += 365 * 24 * 60 * 60 * 1000;
     store.storeSetupDraft("nonce-2345", makeDraft({ workspaceKey: "workspace-2" }));
 
-    expect(store.getSetupDraftCount()).toBe(1);
-    expect(store.readSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild").status).toBe("missing");
+    expect(store.getSetupDraftCount()).toBe(2);
+    expect(store.readSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild").status).toBe("ok");
     expect(store.readSetupDraft("nonce-2345", "actor-1", "workspace-2", "guild").status).toBe("ok");
   });
 
@@ -346,7 +324,7 @@ describe("setup draft store", () => {
       expect(authTokenBuffer.every((byte) => byte === 0)).toBe(true);
     });
 
-    it("zero-fills buffer when draft expires on read", () => {
+    it("keeps a buffer intact while its draft remains active", () => {
       let currentTime = 1000;
       const store = createSetupDraftStore(() => currentTime);
       const secretKeyBuffer = Buffer.from("api-key-that-will-expire");
@@ -362,13 +340,13 @@ describe("setup draft store", () => {
         }),
       );
 
-      currentTime += SETUP_DRAFT_TTL_MINUTES * 60 * 1000 + 1;
+      currentTime += 365 * 24 * 60 * 60 * 1000;
       const result = store.readSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild");
-      expect(result.status).toBe("missing");
-      expect(secretKeyBuffer.every((byte) => byte === 0)).toBe(true);
+      expect(result.status).toBe("ok");
+      expect(secretKeyBuffer.some((byte) => byte !== 0)).toBe(true);
     });
 
-    it("zero-fills buffer when expired entries are swept during subsequent write", () => {
+    it("keeps a buffer intact when another draft is stored", () => {
       let currentTime = 1000;
       const store = createSetupDraftStore(() => currentTime);
       const secretKeyBuffer = Buffer.from("swept-api-key");
@@ -384,9 +362,9 @@ describe("setup draft store", () => {
         }),
       );
 
-      currentTime += SETUP_DRAFT_TTL_MINUTES * 60 * 1000 + 1;
+      currentTime += 365 * 24 * 60 * 60 * 1000;
       store.storeSetupDraft("nonce-2345", makeDraft({ workspaceKey: "workspace-2" }));
-      expect(secretKeyBuffer.every((byte) => byte === 0)).toBe(true);
+      expect(secretKeyBuffer.some((byte) => byte !== 0)).toBe(true);
     });
 
     it("zero-fills displaced provider access buffer when updated with new access", () => {

@@ -93,7 +93,8 @@ what exposes the bug, so the two rules are always applied together.
 
 ## Structure
 
-- `###` for a page or major section heading.
+- `##` for a page title that contains major sections.
+- `###` for a page heading without nested sections, or for a major section heading.
 - **Bold** for a nested subsection label.
 - Plain text for short explanations and empty states.
 - Quote rows (`>`) for current values, statuses, and entities.
