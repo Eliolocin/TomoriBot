@@ -306,7 +306,8 @@ async function startPythonSidecar(def: PythonSidecar): Promise<ReturnType<typeof
   });
 
   const defaultHealthTimeoutMs = Number.parseInt(process.env.TOMORI_TTS_HEALTH_TIMEOUT_MS ?? "180000", 10);
-  const healthTimeoutMs = def.healthTimeoutMs ?? (Number.isFinite(defaultHealthTimeoutMs) ? defaultHealthTimeoutMs : 180_000);
+  const healthTimeoutMs =
+    def.healthTimeoutMs ?? (Number.isFinite(defaultHealthTimeoutMs) && defaultHealthTimeoutMs > 0 ? defaultHealthTimeoutMs : 180_000);
   console.log(`${label} Waiting for JSON readiness at ${httpHealthUrl}...`);
   await waitForPythonReady(proc, httpHealthUrl, healthTimeoutMs, readyStatuses);
   console.log(`${label} ${pc.green("Ready ✓")}`);
