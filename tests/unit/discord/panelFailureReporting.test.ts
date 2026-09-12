@@ -2,7 +2,11 @@ import { describe, expect, it } from "bun:test";
 import { ComponentType, MessageFlags } from "discord.js";
 import type { PanelReceipt } from "@/types/discord/panel";
 import { deliverGuardedPanel } from "@/utils/discord/ui/interactionCore";
+import { setupNoticeReceipt } from "@/utils/discord/ui/setupPanel";
 import { log } from "@/utils/misc/logger";
+import { initializeLocalizer } from "@/utils/text/localizer";
+
+await initializeLocalizer();
 
 interface RecordedMetric {
   name: string;
@@ -175,6 +179,44 @@ describe("panel failure reporting chokepoint", () => {
       expect(delivered).toBe(true);
     } finally {
       Object.assign(log, { metric: original });
+    }
+  });
+});
+
+describe("setup wizard terminal notice receipts", () => {
+  it("reports a failed commit as an error and an expired session as a warning", async () => {
+    const { metrics, restore } = captureMetrics();
+    try {
+      const interaction = fakeInteraction("setup:v1:finish:en-US:nonce1234");
+      await deliverGuardedPanel(interaction, validPayload(), {
+        locale: "en-US",
+        receipt: setupNoticeReceipt("en-US", "commit-failed"),
+      });
+      await deliverGuardedPanel(interaction, validPayload(), {
+        locale: "en-US",
+        receipt: setupNoticeReceipt("en-US", "expired"),
+      });
+
+      // A failed commit is a genuine incident the actor must rerun, and it previously emitted
+      // nothing at all; an expired session is routine drift.
+      expect(metrics.map((entry) => entry.fields.reason)).toEqual(["setup_commit_failed", "setup_session_expired"]);
+      expect(metrics.map((entry) => entry.fields.tone)).toEqual(["error", "warning"]);
+      expect(metrics[0]?.fields.namespace).toBe("setup");
+    } finally {
+      restore();
+    }
+  });
+
+  it("stays silent for the in-flight notice, which is not a failure", async () => {
+    const { metrics, restore } = captureMetrics();
+    try {
+      await deliverGuardedPanel(fakeInteraction("setup:v1:finish:en-US:nonce1234"), validPayload(), {
+        locale: "en-US",
+        receipt: setupNoticeReceipt("en-US", "in-flight"),
+      });
+      expect(metrics).toHaveLength(0);
+    } finally {
+      restore();
     }
   });
 });

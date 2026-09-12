@@ -102,14 +102,24 @@ failure traceable.
 
 **Every receipt repaint is observable.** `deliverGuardedPanel` takes the receipt in its delivery
 options and emits one `panel_failure` metric for an `error` or `warning` tone, carrying the locale,
-the heading, and the namespace parsed from the interaction's custom ID. The per-namespace `repaint`
-helpers pass their receipt through, so a panel that repaints as failed is countable in production
-without each of the roughly 149 receipt literals opting in.
+the tone, the namespace parsed from the interaction's custom ID, and a `reason` key. The
+per-namespace `repaint` helpers pass their receipt through, so a panel that repaints as failed is
+countable in production without each of the roughly 149 receipt literals opting in.
 
 The receipt travels beside the payload rather than inside it. Embedding a marker in the rendered
 content would spend the payload's Discord text budget and could push a receipt line past the panel
 prose width limit; passing it as an option keeps the outgoing payload byte-for-byte what the caller
 built.
+
+**Group on `reason`, never on `heading`.** `PanelReceipt.reason` is an optional machine key naming
+the cause (`endpoint_add_unreachable`, `setup_commit_failed`). A receipt that does not set one falls
+back to `<namespace>_<tone>`, and a target with no route id falls back to `unknown`. The heading is
+localized, so grouping on it files one defect under a different label per locale.
+
+Two delivery paths bypass the chokepoint and stay out of the metric: a slash-command interaction
+carries no route id, and the notice payloads built by `buildTransferNoticePayload` carry no receipt
+object. A call site on either path that wants reporting passes a receipt explicitly, which is what
+the import-failure notices and the `/setup` terminal states do.
 
 **Genuinely broken paths log at error level where the cause is still in scope.** The `panel_failure`
 metric is deliberately not an `error_logs` row: most receipts are expected outcomes the actor can
@@ -117,9 +127,14 @@ correct (bad input, a stale panel, an unavailable read), and the production log 
 out entirely, so neither `log.error` for all of them nor `log.warn` for any of them is right. Paths
 where a rollback succeeded, a cause would otherwise be discarded, or a caught error was never read
 call `log.error` at the point the cause still exists. That covers the thrown-away cause in the
-custom endpoint write rollback, the unreachable-endpoint reasons, the moderation quota result's
-unused `error` field, the cross-server memory toggle, and the voice sample download, insert, and
-storage failures.
+custom endpoint write rollback, the provider-construction failures reported to the actor as an
+unsupported provider, the eight moderation write catches that discarded their error, the moderation
+quota result's unused `error` field, the cross-server memory toggle, and the voice sample download,
+insert, and storage failures.
+
+An expected refusal that still needs to reach the production stream uses `log.metric`, not
+`log.warn`: an unreachable custom endpoint and an unparseable preset upload are both recorded that
+way, because the reason is diagnostic even though the failure is the actor's to correct.
 
 Collector-owned pagination helpers (`replyPaginatedChoices`, `replyPaginatedPersonaChoicesV2`)
 follow the same split: an expiry stays at `warn`, while a callback failure or an abnormal collector

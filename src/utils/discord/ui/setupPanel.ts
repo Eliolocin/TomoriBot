@@ -511,6 +511,39 @@ export function buildSetupCancelledPayload(locale: string): ComponentsV2MessageP
 }
 
 /**
+ * Receipt describing a terminal wizard notice, for the delivery layer's failure reporting.
+ *
+ * Kept beside the notice payloads rather than derived from their components: the payload builders
+ * stay payload-only so callers and tests keep consuming a bare Components V2 message, while a call
+ * site that already knows which notice it is repainting can hand logging the matching receipt.
+ */
+export function setupNoticeReceipt(locale: string, notice: "commit-failed" | "expired" | "in-flight"): PanelReceipt {
+  switch (notice) {
+    case "commit-failed":
+      return {
+        tone: "error",
+        heading: localizer(locale, "commands.setup.wizard.commit_failed_title"),
+        detail: localizer(locale, "commands.setup.wizard.commit_failed_description"),
+        reason: "setup_commit_failed",
+      };
+    case "expired":
+      return {
+        tone: "warning",
+        heading: localizer(locale, "commands.setup.wizard.session_ended_title"),
+        detail: localizer(locale, "commands.setup.wizard.session_ended_description"),
+        reason: "setup_session_expired",
+      };
+    case "in-flight":
+      return {
+        tone: "info",
+        heading: localizer(locale, "commands.setup.wizard.commit_in_progress_title"),
+        detail: localizer(locale, "commands.setup.wizard.commit_in_progress"),
+        reason: "setup_commit_in_flight",
+      };
+  }
+}
+
+/**
  * Terminal replacement for a workspace whose commit transaction failed.
  *
  * It reads as a refusal rather than a receipt: the draft is consumed at this point, so the actor

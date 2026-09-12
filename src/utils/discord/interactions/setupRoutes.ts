@@ -56,6 +56,7 @@ import {
   parseSetupHumanizerChoice,
   parseSetupSystemPromptChoice,
   parseSetupTimezoneOffset,
+  setupNoticeReceipt,
   toSetupSettingsCatalogs,
   type SetupSettingsCatalogs,
 } from "@/utils/discord/ui/setupPanel";
@@ -466,7 +467,7 @@ async function deliverSetupWizard(
     receipt: options.receipt,
     settingsCatalogs: options.settingsCatalogs,
   });
-  await deliverGuardedPanel(interaction, payload, { locale, method: options.method });
+  await deliverGuardedPanel(interaction, payload, { locale, method: options.method, receipt: options.receipt });
 }
 
 /**
@@ -494,6 +495,7 @@ function providerValidationFailureReceipt(locale: string): PanelReceipt {
     tone: "error",
     heading: localizer(locale, "commands.setup.wizard.provider_validation_failed_title"),
     detail: localizer(locale, "commands.setup.wizard.provider_validation_failed"),
+    reason: "setup_provider_validation_failed",
   };
 }
 
@@ -502,6 +504,7 @@ function setupFailureReceipt(locale: string, detail: string): PanelReceipt {
     tone: "error",
     heading: localizer(locale, "commands.setup.wizard.change_failed_title"),
     detail,
+    reason: "setup_step_failed",
   };
 }
 
@@ -576,11 +579,19 @@ async function applySetupDraftWrite(
   method: "update" | "editReply",
 ): Promise<void> {
   if (write.status === "in-flight") {
-    await deliverGuardedPanel(interaction, buildSetupInFlightPayload(locale), { locale, method });
+    await deliverGuardedPanel(interaction, buildSetupInFlightPayload(locale), {
+      locale,
+      method,
+      receipt: setupNoticeReceipt(locale, "in-flight"),
+    });
     return;
   }
   if (write.status === "missing") {
-    await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), { locale, method });
+    await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), {
+      locale,
+      method,
+      receipt: setupNoticeReceipt(locale, "expired"),
+    });
     return;
   }
   if (write.status === "ok") {
@@ -945,7 +956,11 @@ export async function finishSetupWizardDraft(
     // Missing means the draft expired or a racing confirmation already consumed it. Neither may
     // start a second transaction, and both have to answer because a silent return reads as a failed
     // interaction in the client.
-    await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), { locale, method: "editReply" });
+    await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), {
+      locale,
+      method: "editReply",
+      receipt: setupNoticeReceipt(locale, "expired"),
+    });
     return { status: "failed" };
   }
 
@@ -962,7 +977,11 @@ export async function finishSetupWizardDraft(
 
     if (drift) {
       if (drift.scope === "none") {
-        await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), { locale, method: "editReply" });
+        await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), {
+          locale,
+          method: "editReply",
+          receipt: setupNoticeReceipt(locale, "expired"),
+        });
         return { status: "failed" };
       }
 
@@ -982,7 +1001,11 @@ export async function finishSetupWizardDraft(
         return { status: "drift", notice: drift.notice, scope: drift.scope };
       }
 
-      await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), { locale, method: "editReply" });
+      await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), {
+        locale,
+        method: "editReply",
+        receipt: setupNoticeReceipt(locale, "expired"),
+      });
       return { status: "failed" };
     }
 
@@ -1036,7 +1059,11 @@ export async function finishSetupWizardDraft(
           settingsCatalogs: catalogs,
         });
       } else {
-        await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), { locale, method: "editReply" });
+        await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), {
+          locale,
+          method: "editReply",
+          receipt: setupNoticeReceipt(locale, "expired"),
+        });
       }
       preserved = true;
       return {
@@ -1076,7 +1103,11 @@ export async function finishSetupWizardDraft(
       setupResult = await serverRepository.setup(context === "guild" ? (interaction.guild ?? null) : null, setupConfig);
     } catch (error) {
       log.error("[Setup] Setup transaction failed:", error);
-      await deliverGuardedPanel(interaction, buildSetupCommitFailedPayload(locale), { locale, method: "editReply" });
+      await deliverGuardedPanel(interaction, buildSetupCommitFailedPayload(locale), {
+        locale,
+        method: "editReply",
+        receipt: setupNoticeReceipt(locale, "commit-failed"),
+      });
       return { status: "failed" };
     }
 
@@ -1113,6 +1144,7 @@ export async function finishSetupWizardDraft(
         await deliverGuardedPanel(interaction, buildSetupCommitFailedPayload(locale), {
           locale,
           method: "editReply",
+          receipt: setupNoticeReceipt(locale, "commit-failed"),
         });
       } catch (noticeError) {
         log.error("[Setup] Failed to deliver the receipt-failure notice:", noticeError);
@@ -1132,7 +1164,11 @@ export async function finishSetupWizardDraft(
       error,
     );
     try {
-      await deliverGuardedPanel(interaction, buildSetupCommitFailedPayload(locale), { locale, method: "editReply" });
+      await deliverGuardedPanel(interaction, buildSetupCommitFailedPayload(locale), {
+        locale,
+        method: "editReply",
+        receipt: setupNoticeReceipt(locale, "commit-failed"),
+      });
     } catch (replyError) {
       log.error("[Setup] Failed to deliver the commit-failure notice:", replyError);
     }
@@ -1232,7 +1268,11 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
     const readResult = readSetupDraft(nonce, actorDiscId, workspaceKey, context);
     if (readResult.status === "missing") {
       const expiredPayload = buildSetupExpiredPayload(locale);
-      await deliverGuardedPanel(interaction, expiredPayload, { locale, method: "update" });
+      await deliverGuardedPanel(interaction, expiredPayload, {
+        locale,
+        method: "update",
+        receipt: setupNoticeReceipt(locale, "expired"),
+      });
       return;
     }
 
@@ -1250,7 +1290,11 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
       // A commit is running on this draft, so every other action is refused rather than dispatched:
       // the draft is frozen until that commit finishes, and a repaint that read it would be showing
       // state the commit is about to replace.
-      await deliverGuardedPanel(interaction, buildSetupInFlightPayload(locale), { locale, method: "update" });
+      await deliverGuardedPanel(interaction, buildSetupInFlightPayload(locale), {
+        locale,
+        method: "update",
+        receipt: setupNoticeReceipt(locale, "in-flight"),
+      });
       return;
     }
 
@@ -1356,7 +1400,11 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
           return;
         }
 
-        await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), { locale, method: "editReply" });
+        await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), {
+          locale,
+          method: "editReply",
+          receipt: setupNoticeReceipt(locale, "expired"),
+        });
         return;
       }
 
@@ -1455,7 +1503,11 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
           return;
         }
 
-        await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), { locale, method: "editReply" });
+        await deliverGuardedPanel(interaction, buildSetupExpiredPayload(locale), {
+          locale,
+          method: "editReply",
+          receipt: setupNoticeReceipt(locale, "expired"),
+        });
         return;
       }
 
