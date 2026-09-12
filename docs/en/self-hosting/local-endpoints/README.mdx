@@ -34,7 +34,7 @@ Pick a capability to set up:
 
 <CardGrid>
   <LinkCard title="Text-to-Speech" href="/self-hosting/local-endpoints/text-to-speech/"
-    description="Local TTS engines (Chatterbox, Qwen3-TTS, IrodoriTTS, Fish S2 Pro) for native Discord voice messages and voice cloning." />
+    description="Local TTS engines (Chatterbox, Qwen3-TTS, IrodoriTTS, Fish S2 Pro, VoxCPM2) for native Discord voice messages, voice cloning, and VoiceDesign." />
   <LinkCard title="Speech-to-Text" href="/self-hosting/local-endpoints/speech-to-text/"
     description="Transcribe audio attachments locally with WhisperX, whisper.cpp, or KoboldCPP." />
 </CardGrid>
@@ -69,12 +69,13 @@ bun run launch --searxng --crawl4ai
 # With a local TTS server (venv must be set up first — see the Text-to-Speech guide below)
 bun run launch --qwen3tts
 bun run launch --fishs2
+bun run launch --voxcpm2
 
 # See all available flags
 bun run launch --help
 ```
 
-Available flags: `--searxng`, `--crawl4ai`, `--qwen3tts`, `--chatterbox`, `--irodoritts`, `--fishs2`, `--whisperx`
+Available flags: `--searxng`, `--crawl4ai`, `--qwen3tts`, `--chatterbox`, `--irodoritts`, `--voxcpm2`, `--fishs2`, `--whisperx`
 
 Docker sidecars (`--searxng`, `--crawl4ai`) are created on first run and reused on subsequent runs. Python TTS/STT sidecars require their venv to be set up once beforehand; see the individual setup guides under [Text-to-Speech](/self-hosting/local-endpoints/text-to-speech/) and [Speech-to-Text](/self-hosting/local-endpoints/speech-to-text/).
 

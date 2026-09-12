@@ -62,6 +62,8 @@ export interface VoiceMessageModalInput {
   scriptMarkup: string | undefined;
   /** Render the Delivery Direction field: some design-shaped source is available. */
   designShapeAvailable: boolean;
+  /** Render Delivery Direction for clone-shaped requests that support `instruct`. */
+  cloneInstructionsAvailable: boolean;
   /** Render the Reference Transcript field: an uploaded clip will be cloned. */
   uploadShapeSelected: boolean;
   /** Render the delivery-knob radio, or null when the backend has no such knob. */
@@ -194,7 +196,7 @@ export function buildVoiceMessageModalComponents(input: VoiceMessageModalInput):
   const sourceField = buildVoiceSourceField(locale, input.candidates);
   if (sourceField) components.push(sourceField);
 
-  if (input.designShapeAvailable) {
+  if (input.designShapeAvailable || input.cloneInstructionsAvailable) {
     components.push({
       customId: VOICE_MESSAGE_DIRECTION_INPUT_ID,
       labelKey: "commands.generate.voice-message.modal.direction_label",

@@ -50,6 +50,8 @@ export interface TtsCloneRequest {
   script: string;
   /** Empty string for local endpoints that don't require auth. */
   apiKey: string;
+  /** Optional per-message delivery direction for clone engines that advertise instruction support. */
+  voiceInstructions?: string;
   chatterbox?: {
     turboEnabled: boolean;
     cfgWeight: number;
@@ -134,6 +136,8 @@ export interface TtsCloneBufferRequest {
   script: string;
   /** Empty string for local endpoints that don't require auth. */
   apiKey: string;
+  /** Optional per-message delivery direction for clone engines that advertise instruction support. */
+  voiceInstructions?: string;
   chatterbox?: {
     turboEnabled: boolean;
     cfgWeight: number;
@@ -152,7 +156,7 @@ export interface TtsCloneBufferRequest {
  * 3. Returns the raw audio buffer and content-type.
  */
 export async function synthesizeSpeechViaTtsCloneBuffer(request: TtsCloneBufferRequest): Promise<TtsCloneResult> {
-  const { endpoint, refAudio, refText, script, apiKey, chatterbox } = request;
+  const { endpoint, refAudio, refText, script, apiKey, voiceInstructions, chatterbox } = request;
 
   const scriptMarkup = (endpoint.extra_config.script_markup as string | undefined) ?? "plain";
   const supportsInstruct = Boolean(endpoint.extra_config.supports_instruct);
@@ -201,7 +205,7 @@ export async function synthesizeSpeechViaTtsCloneBuffer(request: TtsCloneBufferR
   }
 
   if (supportsInstruct) {
-    body.instruct = null;
+    body.instruct = voiceInstructions?.trim() || null;
   }
 
   const endpointUrl = endpoint.endpoint_url.replace(/\/+$/, "");
@@ -282,7 +286,7 @@ export async function synthesizeSpeechViaTtsCloneBuffer(request: TtsCloneBufferR
  * 5. Returns the raw audio buffer and content-type.
  */
 export async function synthesizeSpeechViaTtsClone(request: TtsCloneRequest): Promise<TtsCloneResult> {
-  const { endpoint, voiceSampleId, script, apiKey, chatterbox } = request;
+  const { endpoint, voiceSampleId, script, apiKey, voiceInstructions, chatterbox } = request;
 
   const voiceSample = await loadVoiceSampleById(voiceSampleId);
 
@@ -313,6 +317,7 @@ export async function synthesizeSpeechViaTtsClone(request: TtsCloneRequest): Pro
     refText: sample.ref_text ?? null,
     script,
     apiKey,
+    ...(voiceInstructions ? { voiceInstructions } : {}),
     ...(chatterbox ? { chatterbox } : {}),
   });
 }
