@@ -111,6 +111,14 @@ content would spend the payload's Discord text budget and could push a receipt l
 prose width limit; passing it as an option keeps the outgoing payload byte-for-byte what the caller
 built.
 
+**`deliverGuardedPanel` is the only emitter of `panel_failure`.** A route that counts a failure
+itself and then repaints with a receipt would count the same failure twice, under two reason keys,
+so a site that needs to record detail a receipt cannot carry emits `panel_failure_detail` instead
+and names its cause on the receipt. Counting queries therefore stay on `panel_failure`, and a
+drill-down joins the two on `reason`. `tests/unit/discord/panelFailureSingleEmission.test.ts` scans
+the source to hold that invariant, because no test over the delivery helper can see a second
+emitter.
+
 **Group on `reason`, never on `heading`.** `PanelReceipt.reason` is an optional machine key naming
 the cause (`endpoint_add_unreachable`, `setup_commit_failed`). A receipt that does not set one falls
 back to `<namespace>_<tone>`, and a target with no route id falls back to `unknown`. The heading is
@@ -134,7 +142,14 @@ insert, and storage failures.
 
 An expected refusal that still needs to reach the production stream uses `log.metric`, not
 `log.warn`: an unreachable custom endpoint and an unparseable preset upload are both recorded that
-way, because the reason is diagnostic even though the failure is the actor's to correct.
+way, because the reason is diagnostic even though the failure is the actor's to correct. Their
+per-failure detail goes to `panel_failure_detail`, with the cause named on the receipt so the count
+still comes from the chokepoint.
+
+Most receipts still fall back to `<namespace>_<tone>`, which groups a whole panel rather than a
+cause. Explicit reasons exist where the cause is already known at the site: providers, moderation
+quota, moderation batch removals, transfer imports, and the `/setup` terminal states. Widening that
+coverage is additive and does not change the counting contract.
 
 Collector-owned pagination helpers (`replyPaginatedChoices`, `replyPaginatedPersonaChoicesV2`)
 follow the same split: an expiry stays at `warn`, while a callback failure or an abnormal collector

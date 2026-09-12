@@ -1397,14 +1397,14 @@ export function createModerationInteractionRoute(
           });
         }
         // A batch that removed some entries and refused others reads as a failure to the actor
-        // while the counter above still counts the removals that did land. Recording the split
-        // keeps those two stories reconcilable. A batch where nothing landed is the more serious
-        // outcome, so it is recorded too rather than being the one case that stays silent.
+        // while the counter above still counts the removals that did land. A batch where nothing
+        // landed is the more serious outcome. Both are named on the receipt below, which is what
+        // reports them, so counting stays on the chokepoint and only the counts land here.
+        const channelRemovalReason =
+          successCount > 0 ? "whitelist_channel_remove_partial" : "whitelist_channel_remove_total";
         if (failed) {
-          log.metric("panel_failure", {
-            namespace: "moderation",
-            tone: "error",
-            reason: successCount > 0 ? "whitelist_channel_remove_partial" : "whitelist_channel_remove_total",
+          log.metric("panel_failure_detail", {
+            reason: channelRemovalReason,
             requested: ids.length,
             removed: successCount,
           });
@@ -1414,6 +1414,7 @@ export function createModerationInteractionRoute(
               tone: "error",
               heading: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed"),
               detail: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed_detail"),
+              reason: channelRemovalReason,
             }
           : ids.length === 0
             ? {
@@ -1592,6 +1593,7 @@ export function createModerationInteractionRoute(
             tone: "error",
             heading: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed"),
             detail: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed_detail"),
+            reason: "whitelist_channel_remove_failed",
           };
         }
 
@@ -1851,11 +1853,10 @@ export function createModerationInteractionRoute(
             userDiscId: interaction.user?.id ?? "",
           });
         }
+        const roleRemovalReason = successCount > 0 ? "whitelist_role_remove_partial" : "whitelist_role_remove_total";
         if (failed) {
-          log.metric("panel_failure", {
-            namespace: "moderation",
-            tone: "error",
-            reason: successCount > 0 ? "whitelist_role_remove_partial" : "whitelist_role_remove_total",
+          log.metric("panel_failure_detail", {
+            reason: roleRemovalReason,
             requested: ids.length,
             removed: successCount,
           });
@@ -1865,6 +1866,7 @@ export function createModerationInteractionRoute(
               tone: "error",
               heading: localizer(route.locale, "commands.moderation.whitelist_role_remove_failed"),
               detail: localizer(route.locale, "commands.moderation.whitelist_role_remove_failed_detail"),
+              reason: roleRemovalReason,
             }
           : ids.length === 0
             ? {
@@ -1996,6 +1998,7 @@ export function createModerationInteractionRoute(
                   tone: "error",
                   heading: localizer(route.locale, "commands.moderation.whitelist_role_remove_failed"),
                   detail: localizer(route.locale, "commands.moderation.whitelist_role_remove_failed_detail"),
+                  reason: "whitelist_role_remove_failed",
                 };
 
         const reloadedScope = await dependencies.resolveScope(interaction, false);
@@ -2202,9 +2205,7 @@ export function createModerationInteractionRoute(
           });
         }
         if (failed) {
-          log.metric("panel_failure", {
-            namespace: "moderation",
-            tone: "error",
+          log.metric("panel_failure_detail", {
             reason: "persona_channel_remove_failed",
             removed: successCount,
           });
@@ -2214,6 +2215,7 @@ export function createModerationInteractionRoute(
               tone: "error",
               heading: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed"),
               detail: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed_detail"),
+              reason: "persona_channel_remove_failed",
             }
           : removed.size === 0
             ? {

@@ -1054,12 +1054,10 @@ export function createTransferInteractionRoute(
             // behind. The snapshot is deliberately left unconsumed: a failed apply is not a reason to destroy the
             // pending import.
             const failureDescriptionKey = importResult.error ?? "commands.transfer.memory_import_failed_description";
-            // A failed apply is otherwise entirely invisible: the notice carries no receipt, and the
-            // operation only logs when starting an import. The description key is the one structured
-            // signal about why the transaction refused, so it is recorded as the reason.
-            log.metric("panel_failure", {
-              namespace: "transfer",
-              tone: "error",
+            // A failed apply carries no reason of its own, and the operation only logs when starting
+            // an import, so the cause is named on the receipt and reported once by the delivery
+            // layer. Emitting panel_failure here would double-count it against the chokepoint.
+            log.metric("panel_failure_detail", {
               reason: "memory_import_apply_failed",
               detail: failureDescriptionKey,
             });
@@ -1077,6 +1075,7 @@ export function createTransferInteractionRoute(
                   tone: "error",
                   heading: localizer(route.locale, "commands.transfer.memory_import_failed_title"),
                   detail: localizer(route.locale, failureDescriptionKey),
+                  reason: "memory_import_apply_failed",
                 },
               },
             );
@@ -1275,10 +1274,9 @@ export function createTransferInteractionRoute(
           // The import is one transaction, so a failed result left no partially applied section behind. The snapshot
           // is deliberately left unconsumed: a failed apply is not a reason to destroy the pending import.
           const failureDescriptionKey = importResult.error ?? "commands.transfer.config_import_failed_description";
-          // Same blind spot as the memory apply above: the notice carries no receipt of its own.
-          log.metric("panel_failure", {
-            namespace: "transfer",
-            tone: "error",
+          // Same blind spot as the memory apply above: the notice carries no receipt of its own, so
+          // the cause is named on the receipt and reported once by the delivery layer.
+          log.metric("panel_failure_detail", {
             reason: "config_import_apply_failed",
             detail: failureDescriptionKey,
           });
@@ -1296,6 +1294,7 @@ export function createTransferInteractionRoute(
                 tone: "error",
                 heading: localizer(route.locale, "commands.transfer.config_import_failed_title"),
                 detail: localizer(route.locale, failureDescriptionKey),
+                reason: "config_import_apply_failed",
               },
             },
           );

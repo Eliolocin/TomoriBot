@@ -187,7 +187,7 @@ export async function importStPreset(
     // A preset that will not parse, or is not JSON at all, is the actor's file rather than an
     // incident, but the uploaded bytes are gone by the time they see the receipt, so warn here is
     // still not enough to diagnose a report. Recorded as a metric to stay out of the error stream.
-    log.metric("panel_failure", {
+    log.metric("panel_failure_detail", {
       namespace: "config",
       tone: "error",
       reason: "st_preset_upload_invalid_json",

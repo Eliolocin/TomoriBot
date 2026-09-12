@@ -985,7 +985,7 @@ export async function addCustomEndpointConnection(
     // An expected refusal, so this is a metric and not an incident. It cannot be `log.warn`: the
     // production level filter drops warn entirely, which is the blind spot this change exists to
     // close. The reason is carried here because the receipt shows only the safe subset.
-    log.metric("panel_failure", {
+    log.metric("panel_failure_detail", {
       namespace: "providers",
       tone: "error",
       reason: "custom_endpoint_unreachable",
@@ -1532,7 +1532,7 @@ async function editServerEndpoint(input: EditEndpointInput): Promise<EditEndpoin
       });
       if (!reachable.ok) {
         // Same treatment as the add path: a metric, because warn never reaches production.
-        log.metric("panel_failure", {
+        log.metric("panel_failure_detail", {
           namespace: "providers",
           tone: "error",
           reason: "custom_endpoint_unreachable",
