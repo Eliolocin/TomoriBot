@@ -15,6 +15,7 @@ import {
   PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
   type ProvidersRouteNamespace,
 } from "@/utils/discord/providersPanelCatalog";
+import { log } from "@/utils/misc/logger";
 import type {
   EndpointProviderPanelEntry,
   ProviderPanelCapability,
@@ -968,7 +969,20 @@ export async function addCustomEndpointConnection(
     endpointUrl,
     apiKey: authToken || null,
   });
-  if (!reachable.ok) return { status: "unreachable", reason: reachable.reason };
+  if (!reachable.ok) {
+    // Expected refusal, so warn rather than error: the actor can correct a URL or credential and
+    // retry. The reason is still recorded here because the receipt shows only the safe subset.
+    log.warn("Custom endpoint reachability check refused a new connection", undefined, {
+      errorType: "CustomEndpointUnreachable",
+      metadata: {
+        serverDiscId: input.serverDiscId,
+        apiStyle: input.apiStyle,
+        endpointUrl,
+        reason: reachable.reason,
+      },
+    });
+    return { status: "unreachable", reason: reachable.reason };
+  }
 
   const createdConnectionIds: number[] = [];
   try {
@@ -1006,7 +1020,20 @@ export async function addCustomEndpointConnection(
         : await dependencies.upsertSavedConfig(input.state.server_id, savedConfig as SavedProviderConfigUpsert);
       if (!upserted) throw new Error("Custom endpoint credential snapshot could not be saved");
     }
-  } catch {
+  } catch (error) {
+    // The rollback below can succeed, so this return is the only surviving evidence that anything
+    // went wrong. Binding the error and recording it is what keeps a rolled-back endpoint addition
+    // distinguishable from an ordinary validation refusal.
+    log.error("Custom endpoint connection could not be saved; rolled back created connections", error, {
+      errorType: "CustomEndpointWriteFailed",
+      metadata: {
+        serverDiscId: input.serverDiscId,
+        scopeKind,
+        label,
+        capabilityCount: capabilities.length,
+        createdConnectionCount: createdConnectionIds.length,
+      },
+    });
     if (createdConnectionIds.length > 0) {
       await dependencies.deleteConnections(ownerId, scopeKind, createdConnectionIds);
     }
@@ -1492,7 +1519,21 @@ async function editServerEndpoint(input: EditEndpointInput): Promise<EditEndpoin
         endpointUrl,
         apiKey: credential,
       });
-      if (!reachable.ok) return { status: "unreachable", reason: reachable.reason };
+      if (!reachable.ok) {
+        // Same expected-refusal treatment as the add path: the edited URL or credential is what
+        // the actor has to correct, and the receipt does not carry the raw reason.
+        log.warn("Custom endpoint reachability check refused an edit", undefined, {
+          errorType: "CustomEndpointUnreachable",
+          metadata: {
+            serverDiscId: input.serverDiscId,
+            entryId: input.entryId,
+            apiStyle: connection.api_style,
+            endpointUrl,
+            reason: reachable.reason,
+          },
+        });
+        return { status: "unreachable", reason: reachable.reason };
+      }
     }
   }
 

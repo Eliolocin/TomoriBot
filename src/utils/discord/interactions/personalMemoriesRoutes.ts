@@ -430,7 +430,7 @@ async function repaint(
       }),
       selectedPersonaAvatar,
     ),
-    { locale },
+    { locale, receipt: panelReceipt },
   );
 }
 

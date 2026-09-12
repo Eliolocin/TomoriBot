@@ -312,7 +312,13 @@ export const personalConfigOperations: PersonalConfigOperations = {
     try {
       const enabled = await userRepository.toggleCrossServerShmOptIn(userDiscId);
       return { status: "success", enabled };
-    } catch {
+    } catch (error) {
+      // The route can only say the write failed, so the cause has to be recorded here or it is
+      // lost entirely.
+      log.error("Failed to toggle cross-server short-term memory", error as Error, {
+        errorType: "DatabaseUpdateError",
+        metadata: { userDiscId },
+      });
       return { status: "write-failed" };
     }
   },

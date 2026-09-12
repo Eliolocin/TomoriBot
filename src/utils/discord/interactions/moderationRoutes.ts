@@ -68,6 +68,7 @@ import {
   type ModerationWhitelistChannelAddScopeData,
   type QuotaConfigState,
 } from "@/utils/moderation/moderationOperations";
+import { log } from "@/utils/misc/logger";
 import { recordPanelActionStat, type RecordPanelActionInput } from "@/utils/stats/panelActionMetrics";
 import { localizer } from "@/utils/text/localizer";
 
@@ -339,7 +340,7 @@ async function repaint(
       channelRemoveTarget,
       roleRemoveTarget,
     }),
-    { locale },
+    { locale, receipt: panelReceipt },
   );
 }
 
@@ -1395,6 +1396,19 @@ export function createModerationInteractionRoute(
             userDiscId: interaction.user?.id ?? "",
           });
         }
+        // A batch that removed some entries and refused others reads as a failure to the actor
+        // while the counter above still counts the removals that did land. Recording the split
+        // keeps those two stories reconcilable.
+        if (failed && successCount > 0) {
+          log.error("Whitelist channel removal partially failed", undefined, {
+            errorType: "ModerationBatchPartialFailure",
+            metadata: {
+              serverId: scope.serverId,
+              requestedCount: ids.length,
+              removedCount: successCount,
+            },
+          });
+        }
         const receipt: PanelReceipt = failed
           ? {
               tone: "error",
@@ -1837,6 +1851,16 @@ export function createModerationInteractionRoute(
             userDiscId: interaction.user?.id ?? "",
           });
         }
+        if (failed && successCount > 0) {
+          log.error("Whitelist role removal partially failed", undefined, {
+            errorType: "ModerationBatchPartialFailure",
+            metadata: {
+              serverId: scope.serverId,
+              requestedCount: ids.length,
+              removedCount: successCount,
+            },
+          });
+        }
         const receipt: PanelReceipt = failed
           ? {
               tone: "error",
@@ -2178,6 +2202,15 @@ export function createModerationInteractionRoute(
             userDiscId: interaction.user?.id ?? "",
           });
         }
+        if (failed && successCount > 0) {
+          log.error("Persona channel removal partially failed", undefined, {
+            errorType: "ModerationBatchPartialFailure",
+            metadata: {
+              serverId: scope.serverId,
+              removedCount: successCount,
+            },
+          });
+        }
         const receipt: PanelReceipt = failed
           ? {
               tone: "error",
@@ -2379,6 +2412,21 @@ export function createModerationInteractionRoute(
             }),
           };
         } else {
+          // The operation carries the caught error out in its result, and the receipt has no room
+          // for it. Without this the only record of a failed quota write is the user's screenshot.
+          log.error(
+            "Failed to update moderation quota settings",
+            result.status === "failed" ? result.error : undefined,
+            {
+              errorType: "DatabaseUpdateError",
+              metadata: {
+                serverId: scope.serverId,
+                quotaType: route.quotaType,
+                status: result.status,
+                ...(result.status === "invalid" ? { reason: result.reason } : {}),
+              },
+            },
+          );
           panelReceipt = {
             tone: "error",
             heading: localizer(route.locale, "commands.moderation.quota_edit_failed"),

@@ -468,7 +468,7 @@ function repaint(
       routeNamespace: scope.routeNamespace,
       footerCommand: scope.footerCommand,
     }),
-    { locale },
+    { locale, receipt },
   );
 }
 

@@ -42,6 +42,7 @@ import type {
   GlobalDiscordState,
 } from "@/types/discord/rawApiTypes";
 import type { TomoriState } from "@/types/db/schema";
+import type { PanelReceipt } from "@/types/discord/panel";
 import { resolveAlterPersonaAvatarAsset, type PersonaAvatarAsset } from "@/utils/discord/personaPanelAvatar";
 import { getLastDbError } from "@/utils/cache/tomoriStateCache";
 import {
@@ -1987,6 +1988,14 @@ export interface GuardedPanelDeliveryOptions {
   sourceInteraction?: unknown;
   /** Flags override, e.g. Ephemeral | IsComponentsV2 for initial reply. */
   flags?: MessageFlags | number;
+  /**
+   * The receipt this payload repaints with, when it carries one.
+   *
+   * Threaded through delivery rather than read back off the payload so the failure signal cannot
+   * cost the payload any of its Discord text budget, and cannot widen a rendered receipt past the
+   * panel prose line limit.
+   */
+  receipt?: PanelReceipt;
 }
 
 /**
@@ -2062,6 +2071,44 @@ export function validateAndFallbackPanelPayload<T>(payload: T, locale = "en-US")
 }
 
 /**
+ * Single reporting point for every panel that repaints itself as a failed or warning receipt.
+ *
+ * Route code reports an expected refusal by returning a status object rather than throwing, so the
+ * router's exception handler never sees it and the user's red receipt leaves no trace anywhere.
+ * Every panel transport already funnels through {@link deliverGuardedPanel}, which makes it the one
+ * place a receipt can be observed without an opt-in line in each of the roughly sixteen `repaint`
+ * helpers.
+ *
+ * Emitted as a metric rather than an error record: the metric level is never filtered out of the
+ * production stream, while `error_logs` is reserved for incidents. Most of these receipts are
+ * expected outcomes the actor can correct (bad input, stale panel, unavailable read), and writing
+ * every one of them at error level is the storm the repository's circuit breaker exists to absorb.
+ * The genuinely broken paths log at error level where their cause is still in scope.
+ */
+function reportPanelFailure(
+  target: GuardedPanelDeliveryTarget | ((payload: unknown) => Promise<unknown>),
+  options?: GuardedPanelDeliveryOptions,
+): void {
+  const receipt = options?.receipt;
+  if (!receipt || (receipt.tone !== "error" && receipt.tone !== "warning")) return;
+
+  try {
+    const customId =
+      typeof target === "object" && target !== null && "customId" in target ? target.customId : undefined;
+    log.metric("panel_failure", {
+      locale: options?.locale ?? "en-US",
+      tone: receipt.tone,
+      heading: receipt.heading,
+      // The namespace is the route prefix before the version segment, so a metric query can group
+      // failures by panel without a second lookup.
+      namespace: typeof customId === "string" ? (customId.split(":")[0] ?? "unknown") : "unknown",
+    });
+  } catch {
+    // Diagnostics must never be able to break the delivery they describe.
+  }
+}
+
+/**
  * Universal guarded delivery helper used across all panel transports (initial reply,
  * editReply, component update, anchor replacement, and avatar-bearing paths).
  *
@@ -2076,6 +2123,8 @@ export async function deliverGuardedPanel<T = unknown>(
 ): Promise<T> {
   const locale = options?.locale ?? "en-US";
   let deliveryPayload = validateAndFallbackPanelPayload(payload, locale) as Record<string, unknown>;
+
+  reportPanelFailure(target, options);
 
   if (options?.method === "reply" && options?.flags !== undefined) {
     deliveryPayload = {
@@ -2567,7 +2616,13 @@ export async function replyPaginatedChoices(
                 interaction: buttonInteraction,
               };
             } catch (selectCallbackError) {
-              log.warn("Error occurred during onSelect callback execution:", selectCallbackError);
+              // The callback failed after the actor chose an item, so the user is about to be told
+              // the operation failed while nothing durable records why. Escalated from warn, which
+              // the production level filter drops.
+              await log.error("onSelect callback failed in replyPaginatedChoices", selectCallbackError, {
+                errorType: "PaginationSelectCallbackError",
+                metadata: { userDiscordId: interaction.user.id, absoluteIndex },
+              });
               await buttonInteraction.reply({
                 embeds: [
                   createStandardEmbed(locale, {
@@ -2611,9 +2666,13 @@ export async function replyPaginatedChoices(
               selectedItem,
             };
           } catch (selectCallbackError) {
-            // Error occurred within the onSelect callback (e.g., DB update failed in the command)
-            log.warn("Error occurred during onSelect callback execution:", selectCallbackError); // Log as warn, the command's callback should use log.error with context
-
+            // The callback failed after the actor chose an item, so the user is about to be told the
+            // operation failed while nothing durable records why. Escalated from warn, which the
+            // production level filter drops, and paired with the ambient interaction context.
+            await log.error("onSelect callback failed in replyPaginatedChoices", selectCallbackError, {
+              errorType: "PaginationSelectCallbackError",
+              metadata: { userDiscordId: interaction.user.id, absoluteIndex },
+            });
             await interaction.editReply({
               embeds: [
                 createStandardEmbed(locale, {
@@ -2632,8 +2691,18 @@ export async function replyPaginatedChoices(
             };
           }
         }
-      } catch (_error) {
-        log.warn(`Pagination interaction timed out for user ${interaction.user.id}`); // Log timeout specifically
+      } catch (error) {
+        // Only expiry is routine. An onSelect callback that threw, a deleted panel message, or a
+        // removed channel all land here too, and `log.warn` is filtered out of the production
+        // stream, so those would otherwise reach the user as a bare timeout with no record.
+        if (isCollectorTimeoutError(error)) {
+          log.warn(`Pagination interaction timed out for user ${interaction.user.id}`); // Log timeout specifically
+        } else {
+          await log.error("Pagination interaction ended abnormally in replyPaginatedChoices", error, {
+            errorType: "PaginationCollectorEnded",
+            metadata: { userDiscordId: interaction.user.id, currentPage },
+          });
+        }
         await interaction.editReply({
           embeds: [
             createStandardEmbed(locale, {
@@ -2911,7 +2980,12 @@ export async function replyPaginatedPersonaChoicesV2(
                 interaction: buttonInteraction,
               };
             } catch (selectCallbackError) {
-              log.warn("Error occurred during onSelect callback execution:", selectCallbackError);
+              // Same blind spot as the sibling paginator: the caller's callback decides whether the
+              // write landed, and warn does not survive the production level filter.
+              await log.error("onSelect callback failed in replyPaginatedPersonaChoicesV2", selectCallbackError, {
+                errorType: "PaginationSelectCallbackError",
+                metadata: { userDiscordId: interaction.user.id, absoluteIndex },
+              });
               await buttonInteraction.reply({
                 embeds: [
                   createStandardEmbed(locale, {
@@ -2952,7 +3026,10 @@ export async function replyPaginatedPersonaChoicesV2(
               selectedItem,
             };
           } catch (selectCallbackError) {
-            log.warn("Error occurred during onSelect callback execution:", selectCallbackError);
+            await log.error("onSelect callback failed in replyPaginatedPersonaChoicesV2", selectCallbackError, {
+              errorType: "PaginationSelectCallbackError",
+              metadata: { userDiscordId: interaction.user.id, absoluteIndex },
+            });
             await interaction.editReply({
               components: buildV2StatusComponents(
                 locale,

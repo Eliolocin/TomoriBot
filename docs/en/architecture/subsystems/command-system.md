@@ -93,6 +93,38 @@ Multi-step modal continuations and collection-derived operations (such as person
 
 Do not move existing collectors to the global path merely because the registry exists. Use global routing only when the message is intended to outlive a bounded command session and every interaction can reconstruct its state from the custom ID plus durable data. Continue to use the anchor workflow for multi-step writes, validation, permissions, and cache invalidation that belong to one command session.
 
+### Panel failure observability
+
+A panel reports an expected refusal by returning a status object (`{ status: "write-failed" }`) and
+repainting with a red receipt. It does not throw, so the router's exception handler never sees it and
+the actor's failure leaves no trace unless something else records it. Two rules keep that class of
+failure traceable.
+
+**Every receipt repaint is observable.** `deliverGuardedPanel` takes the receipt in its delivery
+options and emits one `panel_failure` metric for an `error` or `warning` tone, carrying the locale,
+the heading, and the namespace parsed from the interaction's custom ID. The per-namespace `repaint`
+helpers pass their receipt through, so a panel that repaints as failed is countable in production
+without each of the roughly 149 receipt literals opting in.
+
+The receipt travels beside the payload rather than inside it. Embedding a marker in the rendered
+content would spend the payload's Discord text budget and could push a receipt line past the panel
+prose width limit; passing it as an option keeps the outgoing payload byte-for-byte what the caller
+built.
+
+**Genuinely broken paths log at error level where the cause is still in scope.** The `panel_failure`
+metric is deliberately not an `error_logs` row: most receipts are expected outcomes the actor can
+correct (bad input, a stale panel, an unavailable read), and the production log level filters `warn`
+out entirely, so neither `log.error` for all of them nor `log.warn` for any of them is right. Paths
+where a rollback succeeded, a cause would otherwise be discarded, or a caught error was never read
+call `log.error` at the point the cause still exists. That covers the thrown-away cause in the
+custom endpoint write rollback, the unreachable-endpoint reasons, the moderation quota result's
+unused `error` field, the cross-server memory toggle, and the voice sample download, insert, and
+storage failures.
+
+Collector-owned pagination helpers (`replyPaginatedChoices`, `replyPaginatedPersonaChoicesV2`)
+follow the same split: an expiry stays at `warn`, while a callback failure or an abnormal collector
+end logs at error level with the interaction context.
+
 ### The `/setup` wizard
 
 `/setup` is the largest consumer of the global route path. `src/utils/discord/interactions/setupRoutes.ts`

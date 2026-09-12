@@ -662,6 +662,6 @@ export async function repaint(
       }),
       [avatar, spriteAvatar, characterReference].filter((item): item is PersonaPanelAvatarData => item !== undefined),
     ),
-    { locale },
+    { locale, receipt: options.receipt },
   );
 }
