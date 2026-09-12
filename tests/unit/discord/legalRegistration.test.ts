@@ -192,11 +192,11 @@ describe("hosted policy notices", () => {
     const setupAgreement = localizer("en-US", "general.legal.setup_agreement");
 
     setHostedEnvironment(true);
-    const hostedPayload = JSON.stringify(buildHelpDashboardPayload("en-US", "setup", "setup-step-4"));
+    const hostedPayload = JSON.stringify(buildHelpDashboardPayload("en-US", "setup", "personal-profile"));
     expect(hostedPayload).toContain(setupAgreement);
 
     setHostedEnvironment(false);
-    const selfHostedPayload = JSON.stringify(buildHelpDashboardPayload("en-US", "setup", "setup-step-4"));
+    const selfHostedPayload = JSON.stringify(buildHelpDashboardPayload("en-US", "setup", "personal-profile"));
     expect(selfHostedPayload).not.toContain(setupAgreement);
     expect(selfHostedPayload).not.toContain("legal terms-of-service");
   });

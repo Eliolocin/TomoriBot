@@ -1019,8 +1019,17 @@ describe("setupWizardRoutes", () => {
       await dispatchGlobalInteraction({} as Client, interaction);
 
       expect(interaction.editReplyCalls.length).toBe(1);
-      const payloadString = JSON.stringify(interaction.editReplyCalls[0]);
+      const payload = interaction.editReplyCalls[0] as {
+        components: Array<{ accentColor?: number; components?: Array<{ content?: string }> }>;
+      };
+      const payloadString = JSON.stringify(payload);
       expect(payloadString).toContain(localizer("en-US", "commands.setup.wizard.provider_validation_failed"));
+      expect(payloadString).not.toContain(fakeKey);
+      expect(payload.components).toHaveLength(2);
+      expect(payload.components[1]?.accentColor).toBe(0xed4245);
+      expect(payload.components[1]?.components?.[0]?.content).toContain(
+        localizer("en-US", "commands.setup.wizard.provider_validation_failed_title"),
+      );
       expect(encryptSpy).not.toHaveBeenCalled();
 
       const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
@@ -1536,7 +1545,7 @@ describe("setupWizardRoutes", () => {
     }
   });
 
-  it("failed reachability probe writes nothing and omits raw reason from notice", async () => {
+  it("renders a red receipt for an unreachable endpoint without exposing an internal address", async () => {
     const nonce = "nonce-probe-fail";
     const initialDraft = makeDraft({
       providerAccess: {
@@ -1569,10 +1578,18 @@ describe("setupWizardRoutes", () => {
       await dispatchGlobalInteraction({} as Client, interaction);
 
       expect(interaction.editReplyCalls.length).toBe(1);
-      const payloadString = JSON.stringify(interaction.editReplyCalls[0]);
+      const payload = interaction.editReplyCalls[0] as {
+        components: Array<{ accentColor?: number; components?: Array<{ content?: string }> }>;
+      };
+      const payloadString = JSON.stringify(payload);
       expect(payloadString).toContain(localizer("en-US", "commands.setup.wizard.custom_endpoint_unreachable"));
       expect(payloadString).not.toContain(secretReason);
       expect(payloadString).not.toContain("192.168.1.100");
+      expect(payload.components).toHaveLength(2);
+      expect(payload.components[1]?.accentColor).toBe(0xed4245);
+      expect(payload.components[1]?.components?.[0]?.content).toContain(
+        localizer("en-US", "commands.setup.wizard.custom_endpoint_failed_title"),
+      );
 
       const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
       expect(check.status).toBe("ok");
@@ -1583,6 +1600,47 @@ describe("setupWizardRoutes", () => {
           textModel: null,
         });
       }
+    } finally {
+      reachabilitySpy.mockRestore();
+      selectSpy.mockRestore();
+    }
+  });
+
+  it("renders a safe endpoint failure reason in the custom endpoint receipt", async () => {
+    const nonce = "nonce-probe-safe-reason";
+    storeSetupDraft(
+      nonce,
+      makeDraft({
+        providerAccess: { mode: "custom-endpoint", connection: null, textModel: null },
+      }),
+    );
+
+    const reason = "Production requires HTTPS. The target host must be reachable over TLS.";
+    const reachabilitySpy = spyOn(customEndpointService, "validateCustomEndpointReachability").mockResolvedValue({
+      ok: false,
+      reason,
+    });
+    const selectSpy = spyOn(modalModule, "takeRawModalSelectValue").mockReturnValue("openai-compatible");
+
+    try {
+      const customId = buildSetupEndpointConnectionSubmitRouteId({ locale: "en-US", nonce });
+      const interaction = makeMockInteraction({
+        customId,
+        kind: "modal",
+        fields: {
+          [buildSetupEndpointConnectionModalFieldId("label", nonce)]: "Secure Endpoint",
+          [buildSetupEndpointConnectionModalFieldId("url", nonce)]: "https://api.example.com/v1",
+          [buildSetupEndpointConnectionModalFieldId("auth-token", nonce)]: "",
+        },
+      });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      const payload = interaction.editReplyCalls[0] as {
+        components: Array<{ accentColor?: number; components?: Array<{ content?: string }> }>;
+      };
+      expect(payload.components[1]?.accentColor).toBe(0xed4245);
+      expect(payload.components[1]?.components?.[0]?.content).toContain("Production requires HTTPS");
     } finally {
       reachabilitySpy.mockRestore();
       selectSpy.mockRestore();
@@ -1679,8 +1737,16 @@ describe("setupWizardRoutes", () => {
       await dispatchGlobalInteraction({} as Client, interaction);
 
       expect(interaction.editReplyCalls.length).toBe(1);
-      const payloadString = JSON.stringify(interaction.editReplyCalls[0]);
+      const payload = interaction.editReplyCalls[0] as {
+        components: Array<{ accentColor?: number; components?: Array<{ content?: string }> }>;
+      };
+      const payloadString = JSON.stringify(payload);
       expect(payloadString).toContain(localizer("en-US", "commands.setup.wizard.custom_endpoint_model_invalid"));
+      expect(payload.components).toHaveLength(2);
+      expect(payload.components[1]?.accentColor).toBe(0xed4245);
+      expect(payload.components[1]?.components?.[0]?.content).toContain(
+        localizer("en-US", "commands.setup.wizard.custom_endpoint_failed_title"),
+      );
 
       const check = readSetupDraft(nonce, "actor-1", "guild-1", "guild");
       expect(check.status).toBe("ok");
@@ -2112,7 +2178,14 @@ describe("setupWizardRoutes", () => {
 
       expect(modalSpy).toHaveBeenCalledTimes(1);
       const openedModal = modalSpy.mock.calls[0]?.[1] as
-        | { custom_id: string; components: Array<{ type: number; component?: { type: number; custom_id?: string } }> }
+        | {
+            custom_id: string;
+            components: Array<{
+              type: number;
+              description?: string;
+              component?: { type: number; custom_id?: string; options?: Array<{ description?: string }> };
+            }>;
+          }
         | undefined;
 
       const parsed = parseSetupSettingsSubmitRoute(openedModal?.custom_id ?? "");
@@ -2127,6 +2200,12 @@ describe("setupWizardRoutes", () => {
         expect(row.type).toBe(18);
         expect(row.component).toBeDefined();
       }
+      expect(rows.map((row) => row.description)).toEqual([
+        localizer("en-US", "commands.setup.wizard.settings_persona_description"),
+        localizer("en-US", "commands.setup.wizard.settings_humanizer_description"),
+        localizer("en-US", "commands.setup.wizard.settings_timezone_description"),
+        localizer("en-US", "commands.setup.wizard.settings_system_prompt_description"),
+      ]);
       expect(rows.map((row) => row.component?.type)).toEqual([3, 3, 4, 3]);
       expect(rows.map((row) => row.component?.custom_id)).toEqual([
         buildSetupSettingsModalFieldId("persona", nonce),
@@ -2134,6 +2213,9 @@ describe("setupWizardRoutes", () => {
         buildSetupSettingsModalFieldId("timezone", nonce),
         buildSetupSettingsModalFieldId("system-prompt", nonce),
       ]);
+      expect(rows[3]?.component?.options?.[0]?.description).toBe(
+        localizer("en-US", "commands.setup.wizard.settings_built_in_prompt_description"),
+      );
     } finally {
       modalSpy.mockRestore();
       catalogs.restore();
@@ -2346,9 +2428,17 @@ describe("setupWizardRoutes", () => {
         }
 
         expect(interaction.editReplyCalls.length).toBe(1);
-        const repainted = JSON.stringify(interaction.editReplyCalls[0]);
+        const payload = interaction.editReplyCalls[0] as {
+          components: Array<{ accentColor?: number; components?: Array<{ content?: string }> }>;
+        };
+        const repainted = JSON.stringify(payload);
         expect(repainted).toContain(localizer("en-US", `commands.setup.wizard.${submitted.notice}`));
         expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.settings_pending"));
+        expect(payload.components).toHaveLength(2);
+        expect(payload.components[1]?.accentColor).toBe(0xed4245);
+        expect(payload.components[1]?.components?.[0]?.content).toContain(
+          localizer("en-US", "commands.setup.wizard.change_failed_title"),
+        );
       } finally {
         selectSpy.mockRestore();
         catalogs.restore();

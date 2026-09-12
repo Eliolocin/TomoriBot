@@ -35,7 +35,7 @@ import {
 } from "@/utils/discord/interactions/setupRoutes";
 import type { CustomEndpointApiStyle, SetupCustomEndpointCapability } from "@/types/db/schema";
 import { buildNoticeContainer, validateAndFallbackPanelPayload } from "@/utils/discord/ui/interactionCore";
-import { buildPanelContainer, withLinePrefix } from "@/utils/discord/ui/panel";
+import { buildPanelContainer, buildPanelReceiptContainer, withLinePrefix } from "@/utils/discord/ui/panel";
 import {
   getAllProviderChoices,
   getProviderAddChoiceDescriptionKey,
@@ -43,6 +43,7 @@ import {
 } from "@/utils/provider/providerInfoRegistry";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { truncateDiscordText } from "@/utils/text/discordTextLimits";
+import type { PanelReceipt } from "@/types/discord/panel";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import { ColorCode } from "@/utils/misc/logger";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
@@ -56,6 +57,7 @@ export interface SetupWizardPayloadInput {
   isHosted: boolean;
   nonce: string;
   notice?: string;
+  receipt?: PanelReceipt;
   /**
    * The live persona and system-prompt catalogs, read once per repaint so the dashboard reflects a
    * catalog row that has been removed rather than the draft's no-longer-resolvable copy.
@@ -268,7 +270,7 @@ function resolveSettingsSummary(
 export function buildSetupWizardPayload(
   input: SetupWizardPayloadInput,
 ): ComponentsV2MessagePayload & { attachments: readonly [] } {
-  const { draft, locale, isHosted, nonce, notice } = input;
+  const { draft, locale, isHosted, nonce, notice, receipt } = input;
 
   const components: ComponentInContainerData[] = [];
   if (notice) {
@@ -477,9 +479,14 @@ export function buildSetupWizardPayload(
     ],
   });
 
+  const panelTone = isComplete ? "success" : "error";
+
   return validateAndFallbackPanelPayload(
     {
-      components: [buildPanelContainer(components)],
+      components: [
+        buildPanelContainer(components, panelTone),
+        ...(receipt ? [buildPanelReceiptContainer(receipt)] : []),
+      ],
       attachments: [],
       flags: MessageFlags.IsComponentsV2,
     },
@@ -662,7 +669,7 @@ export function buildSetupSuccessPayload(
 
   return validateAndFallbackPanelPayload(
     {
-      components: [buildPanelContainer(components)],
+      components: [buildPanelContainer(components, "success")],
       attachments: [],
       flags: MessageFlags.IsComponentsV2,
     },
@@ -1080,6 +1087,7 @@ export function buildSetupSettingsModal(
       {
         type: 18,
         label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.settings_persona_label"), 45),
+        description: safeSelectOptionText(localizer(locale, "commands.setup.wizard.settings_persona_description"), 100),
         component: {
           type: 3,
           custom_id: buildSetupSettingsModalFieldId("persona", nonce),
@@ -1099,6 +1107,10 @@ export function buildSetupSettingsModal(
       {
         type: 18,
         label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.settings_humanizer_label"), 45),
+        description: safeSelectOptionText(
+          localizer(locale, "commands.setup.wizard.settings_humanizer_description"),
+          100,
+        ),
         component: {
           type: 3,
           custom_id: buildSetupSettingsModalFieldId("humanizer", nonce),
@@ -1113,6 +1125,10 @@ export function buildSetupSettingsModal(
       {
         type: 18,
         label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.settings_timezone_label"), 45),
+        description: safeSelectOptionText(
+          localizer(locale, "commands.setup.wizard.settings_timezone_description"),
+          100,
+        ),
         component: {
           type: 4,
           custom_id: buildSetupSettingsModalFieldId("timezone", nonce),
@@ -1129,6 +1145,10 @@ export function buildSetupSettingsModal(
       {
         type: 18,
         label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.settings_system_prompt_label"), 45),
+        description: safeSelectOptionText(
+          localizer(locale, "commands.setup.wizard.settings_system_prompt_description"),
+          100,
+        ),
         component: {
           // The built-in default is not a catalog row, so it is offered as a synthetic first option
           // and stored as a sentinel rather than as a copy of the read-time default text.
@@ -1143,6 +1163,10 @@ export function buildSetupSettingsModal(
             {
               label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.settings_built_in_prompt"), 100),
               value: SETUP_SYSTEM_PROMPT_BUILT_IN,
+              description: safeSelectOptionText(
+                localizer(locale, "commands.setup.wizard.settings_built_in_prompt_description"),
+                100,
+              ),
               default: storedPrompt?.kind === "built-in",
             },
             ...catalogs.prompts.map((prompt) => ({

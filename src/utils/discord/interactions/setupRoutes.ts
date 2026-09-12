@@ -12,6 +12,7 @@ import {
   type SetupDraftProviderAccess,
   type SetupDraftRecord,
 } from "@/types/discord/setupWizard";
+import type { PanelReceipt } from "@/types/discord/panel";
 import {
   claimSetupDraft,
   consumeSetupDraft,
@@ -91,6 +92,7 @@ import { lazySyncGuildEmojis } from "@/utils/cache/emojiLazySync";
 import { lazySyncGuildStickers } from "@/utils/cache/stickerLazySync";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { localizer, getDefaultBotName } from "@/utils/text/localizer";
+import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import { recordPanelActionStat } from "@/utils/stats/panelActionMetrics";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed, replySummaryEmbed } from "@/utils/discord/interactionHelper";
@@ -451,6 +453,7 @@ async function deliverSetupWizard(
   options: {
     method: "update" | "editReply";
     notice?: string;
+    receipt?: PanelReceipt;
     settingsCatalogs: SetupSettingsCatalogs | null | undefined;
   },
 ): Promise<void> {
@@ -460,6 +463,7 @@ async function deliverSetupWizard(
     isHosted: draft.requiresPolicies,
     nonce,
     notice: options.notice,
+    receipt: options.receipt,
     settingsCatalogs: options.settingsCatalogs,
   });
   await deliverGuardedPanel(interaction, payload, { locale, method: options.method });
@@ -477,12 +481,81 @@ async function repaintSetupWizard(
   draft: SetupDraftRecord,
   locale: string,
   nonce: string,
-  options: { method: "update" | "editReply"; notice?: string },
+  options: { method: "update" | "editReply"; notice?: string; receipt?: PanelReceipt },
 ): Promise<void> {
   await deliverSetupWizard(interaction, draft, locale, nonce, {
     ...options,
     settingsCatalogs: await readSetupSettingsCatalogs(draft, locale),
   });
+}
+
+function providerValidationFailureReceipt(locale: string): PanelReceipt {
+  return {
+    tone: "error",
+    heading: localizer(locale, "commands.setup.wizard.provider_validation_failed_title"),
+    detail: localizer(locale, "commands.setup.wizard.provider_validation_failed"),
+  };
+}
+
+function setupFailureReceipt(locale: string, detail: string): PanelReceipt {
+  return {
+    tone: "error",
+    heading: localizer(locale, "commands.setup.wizard.change_failed_title"),
+    detail,
+  };
+}
+
+function setupInFlightReceipt(locale: string): PanelReceipt {
+  return {
+    tone: "info",
+    heading: localizer(locale, "commands.setup.wizard.commit_in_progress_title"),
+    detail: localizer(locale, "commands.setup.wizard.commit_in_progress"),
+  };
+}
+
+function customEndpointFailureReceipt(locale: string, detail: string): PanelReceipt {
+  return {
+    tone: "error",
+    heading: localizer(locale, "commands.setup.wizard.custom_endpoint_failed_title"),
+    detail,
+  };
+}
+
+function safeCustomEndpointProbeReason(
+  reason: string,
+  endpointUrl: string,
+  authToken: string | undefined,
+): string | null {
+  const normalized = reason.replace(/\s+/g, " ").trim();
+  if (!normalized || /(?:\b(?:\d{1,3}\.){3}\d{1,3}\b|\blocalhost\b)/i.test(normalized)) return null;
+
+  let sanitized = normalized;
+  if (authToken) sanitized = sanitized.split(authToken).join("[redacted]");
+  try {
+    const endpoint = new URL(endpointUrl);
+    sanitized = sanitized.split(endpointUrl).join("[redacted endpoint]");
+    sanitized = sanitized.split(endpoint.host).join("[redacted endpoint]");
+    sanitized = sanitized.split(endpoint.hostname).join("[redacted endpoint]");
+  } catch {
+    return null;
+  }
+
+  return escapeDiscordMarkdown(sanitized.slice(0, 300));
+}
+
+function customEndpointProbeFailureReceipt(
+  locale: string,
+  reason: string,
+  endpointUrl: string,
+  authToken: string | undefined,
+): PanelReceipt {
+  const safeReason = safeCustomEndpointProbeReason(reason, endpointUrl, authToken);
+  return customEndpointFailureReceipt(
+    locale,
+    safeReason
+      ? localizer(locale, "commands.setup.wizard.custom_endpoint_unreachable_detail", { reason: safeReason })
+      : localizer(locale, "commands.setup.wizard.custom_endpoint_unreachable"),
+  );
 }
 
 /**
@@ -863,7 +936,7 @@ export async function finishSetupWizardDraft(
     // success path: the wizard is still the live surface and the first press will replace it.
     await repaintSetupWizard(interaction, draft, locale, nonce, {
       method: "editReply",
-      notice: localizer(locale, "commands.setup.wizard.commit_in_progress"),
+      receipt: setupInFlightReceipt(locale),
     });
     return { status: "in-flight" };
   }
@@ -902,7 +975,7 @@ export async function finishSetupWizardDraft(
       if (cleared.status === "ok") {
         await deliverSetupWizard(interaction, cleared.draft, locale, nonce, {
           method: "editReply",
-          notice: drift.notice,
+          receipt: setupFailureReceipt(locale, drift.notice),
           settingsCatalogs: await readSetupSettingsCatalogs(cleared.draft, locale),
         });
         preserved = true;
@@ -920,7 +993,7 @@ export async function finishSetupWizardDraft(
       releaseSetupDraftClaim(nonce, actorDiscId, workspaceKey, context);
       await repaintSetupWizard(interaction, claimedDraft, locale, nonce, {
         method: "editReply",
-        notice: localizer(locale, "commands.setup.wizard.provider_invalid"),
+        receipt: setupFailureReceipt(locale, localizer(locale, "commands.setup.wizard.provider_invalid")),
       });
       preserved = true;
       return {
@@ -935,7 +1008,7 @@ export async function finishSetupWizardDraft(
       releaseSetupDraftClaim(nonce, actorDiscId, workspaceKey, context);
       await repaintSetupWizard(interaction, claimedDraft, locale, nonce, {
         method: "editReply",
-        notice: localizer(locale, "commands.setup.wizard.settings_unavailable"),
+        receipt: setupFailureReceipt(locale, localizer(locale, "commands.setup.wizard.settings_unavailable")),
       });
       preserved = true;
       return {
@@ -959,7 +1032,7 @@ export async function finishSetupWizardDraft(
       if (cleared.status === "ok") {
         await deliverSetupWizard(interaction, cleared.draft, locale, nonce, {
           method: "editReply",
-          notice: localizer(locale, "commands.setup.wizard.settings_persona_stale"),
+          receipt: setupFailureReceipt(locale, localizer(locale, "commands.setup.wizard.settings_persona_stale")),
           settingsCatalogs: catalogs,
         });
       } else {
@@ -1250,7 +1323,7 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         if (!draft.requiresPolicies) {
           await repaintSetupWizard(interaction, draft, locale, nonce, {
             method: "editReply",
-            notice: localizer(locale, "commands.setup.wizard.policies_denied"),
+            receipt: setupFailureReceipt(locale, localizer(locale, "commands.setup.wizard.policies_denied")),
           });
           return;
         }
@@ -1267,7 +1340,7 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         if (!acceptedEveryDocument) {
           await repaintSetupWizard(interaction, draft, locale, nonce, {
             method: "editReply",
-            notice: localizer(locale, "commands.setup.wizard.policies_required"),
+            receipt: setupFailureReceipt(locale, localizer(locale, "commands.setup.wizard.policies_required")),
           });
           return;
         }
@@ -1297,7 +1370,7 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
           // passed straight through rather than read a second time on this path.
           await deliverSetupWizard(interaction, draft, locale, nonce, {
             method: "update",
-            notice: localizer(locale, "commands.setup.wizard.settings_unavailable"),
+            receipt: setupFailureReceipt(locale, localizer(locale, "commands.setup.wizard.settings_unavailable")),
             settingsCatalogs: catalogs,
           });
           return;
@@ -1317,7 +1390,7 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         if (!areSetupSettingsCatalogsRenderable(catalogs)) {
           await deliverSetupWizard(interaction, draft, locale, nonce, {
             method: "editReply",
-            notice: localizer(locale, "commands.setup.wizard.settings_unavailable"),
+            receipt: setupFailureReceipt(locale, localizer(locale, "commands.setup.wizard.settings_unavailable")),
             settingsCatalogs: catalogs,
           });
           return;
@@ -1363,7 +1436,10 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         if (!nextSettings || !isSetupStartingSettingsResolvable(nextSettings, catalogs)) {
           await repaintSetupWizard(interaction, draft, locale, nonce, {
             method: "editReply",
-            notice: localizer(locale, describeSetupSettingsRejection(rawTimezone, timezoneOffset)),
+            receipt: setupFailureReceipt(
+              locale,
+              localizer(locale, describeSetupSettingsRejection(rawTimezone, timezoneOffset)),
+            ),
           });
           return;
         }
@@ -1450,7 +1526,7 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         if (!selectedProvider || !curatedProviders.has(selectedProvider)) {
           await repaintSetupWizard(interaction, draft, locale, nonce, {
             method: "editReply",
-            notice: localizer(locale, "commands.setup.wizard.provider_invalid"),
+            receipt: setupFailureReceipt(locale, localizer(locale, "commands.setup.wizard.provider_invalid")),
           });
           return;
         }
@@ -1461,7 +1537,7 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         } catch {
           await repaintSetupWizard(interaction, draft, locale, nonce, {
             method: "editReply",
-            notice: localizer(locale, "commands.setup.wizard.provider_validation_failed"),
+            receipt: providerValidationFailureReceipt(locale),
           });
           return;
         }
@@ -1470,7 +1546,7 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         if (!validation.valid) {
           await repaintSetupWizard(interaction, draft, locale, nonce, {
             method: "editReply",
-            notice: localizer(locale, "commands.setup.wizard.provider_validation_failed"),
+            receipt: providerValidationFailureReceipt(locale),
           });
           return;
         }
@@ -1502,7 +1578,7 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         if (context === "dm") {
           await repaintSetupWizard(interaction, draft, locale, nonce, {
             method: "editReply",
-            notice: localizer(locale, "commands.setup.wizard.provider_byok_guild_only"),
+            receipt: setupFailureReceipt(locale, localizer(locale, "commands.setup.wizard.provider_byok_guild_only")),
           });
           return;
         }
@@ -1513,7 +1589,7 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         if (selectedConfirm !== "yes" && selectedConfirm !== "no") {
           await repaintSetupWizard(interaction, draft, locale, nonce, {
             method: "editReply",
-            notice: localizer(locale, "commands.setup.wizard.byok_choice_invalid"),
+            receipt: setupFailureReceipt(locale, localizer(locale, "commands.setup.wizard.byok_choice_invalid")),
           });
           return;
         }
@@ -1567,7 +1643,10 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         if (!selectedApiStyle || !validStyles.has(selectedApiStyle)) {
           await repaintSetupWizard(interaction, draft, locale, nonce, {
             method: "editReply",
-            notice: localizer(locale, "commands.setup.wizard.custom_endpoint_api_style_invalid"),
+            receipt: customEndpointFailureReceipt(
+              locale,
+              localizer(locale, "commands.setup.wizard.custom_endpoint_api_style_invalid"),
+            ),
           });
           return;
         }
@@ -1596,7 +1675,7 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         if (!probe.ok) {
           await repaintSetupWizard(interaction, draft, locale, nonce, {
             method: "editReply",
-            notice: localizer(locale, "commands.setup.wizard.custom_endpoint_unreachable"),
+            receipt: customEndpointProbeFailureReceipt(locale, probe.reason, normalizedUrl, rawToken),
           });
           return;
         }
@@ -1662,7 +1741,10 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         if (!modelCode) {
           await repaintSetupWizard(interaction, draft, locale, nonce, {
             method: "editReply",
-            notice: localizer(locale, "commands.setup.wizard.custom_endpoint_model_invalid"),
+            receipt: customEndpointFailureReceipt(
+              locale,
+              localizer(locale, "commands.setup.wizard.custom_endpoint_model_invalid"),
+            ),
           });
           return;
         }
@@ -1680,7 +1762,10 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
           if (!setupCustomEndpointCapabilitySchema.safeParse(cap).success) {
             await repaintSetupWizard(interaction, draft, locale, nonce, {
               method: "editReply",
-              notice: localizer(locale, "commands.setup.wizard.custom_endpoint_model_invalid"),
+              receipt: customEndpointFailureReceipt(
+                locale,
+                localizer(locale, "commands.setup.wizard.custom_endpoint_model_invalid"),
+              ),
             });
             return;
           }

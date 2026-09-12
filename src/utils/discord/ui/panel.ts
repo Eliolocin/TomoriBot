@@ -13,12 +13,14 @@ import type { PanelReceipt } from "@/types/discord/panel";
 import { buildInteractionRouteId } from "@/utils/discord/interactions/routeRegistry";
 import { localizer } from "@/utils/text/localizer";
 
-const PANEL_ACCENT_BY_TONE = {
+export const PANEL_ACCENT_BY_TONE = {
   success: 0x57f287,
   warning: 0xfee75c,
   error: 0xed4245,
   info: 0x65c6c5,
 } as const;
+
+export type PanelAccentTone = keyof typeof PANEL_ACCENT_BY_TONE;
 
 export interface PaginationRouteSegments {
   page: (rangeIndex: number) => string[];
@@ -40,10 +42,12 @@ export function withLinePrefix(prefix: string, text: string): string {
 
 export function buildPanelContainer(
   components: ComponentInContainerData[],
+  accent?: number | PanelAccentTone,
 ): ContainerComponentData<ComponentInContainerData> {
+  const accentColor = typeof accent === "string" ? PANEL_ACCENT_BY_TONE[accent] : (accent ?? PANEL_ACCENT_BY_TONE.info);
   return {
     type: ComponentType.Container,
-    accentColor: PANEL_ACCENT_BY_TONE.info,
+    accentColor,
     components,
   };
 }

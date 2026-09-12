@@ -1,33 +1,25 @@
-import { version as packageVersion } from "../../../package.json";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { DOCS_PATHS, type DocsPath } from "@/utils/discord/docsLinks";
-import { legalNoticeSuffix } from "@/utils/misc/legalNotice";
 import { localizer } from "@/utils/text/localizer";
 
-export const HELP_CATEGORY_IDS = ["setup", "features", "memory", "behavior", "integrations"] as const;
+export const HELP_CATEGORY_IDS = ["setup", "features", "moderation", "plugins"] as const;
 export type HelpCategoryId = (typeof HELP_CATEGORY_IDS)[number];
 
 export const HELP_PAGE_IDS = [
-  "setup-step-1",
-  "setup-step-2",
-  "setup-step-3",
-  "setup-step-4",
-  "features",
-  "personal-providers",
+  "personal-profile",
   "custom-endpoints",
-  "speech",
-  "transcription",
-  "persistent-memory",
-  "short-term-memory",
-  "memory-tagging",
-  "customization",
-  "personal-spotlight",
-  "deliberate-trigger-mode",
-  "deliberate-tool-mode",
+  "multiple-personas",
+  "media-generation",
+  "tons-of-tweakability",
+  "memory",
+  "scheduled-tasks",
+  "server-moderation",
+  "quotas",
   "age-restricted-commands",
-  "matrix",
-  "mcp",
+  "user-byok",
   "sillytavern-presets",
+  "mcp-servers",
+  "matrix",
 ] as const;
 export type HelpPageId = (typeof HELP_PAGE_IDS)[number];
 
@@ -56,11 +48,13 @@ interface HelpContentDefinition {
 export interface HelpVariantDefinition extends HelpContentDefinition {
   id: string;
   labelKey: string;
+  pickerDescriptionKey: string;
 }
 
 export interface HelpPageDefinition extends HelpContentDefinition {
   id: HelpPageId;
   labelKey: string;
+  pickerDescriptionKey: string;
   variants?: readonly HelpVariantDefinition[];
 }
 
@@ -115,572 +109,545 @@ export function moderationPage(locale: string, breadcrumbKey: string): string {
 
 const setupPages: readonly HelpPageDefinition[] = [
   {
-    id: "setup-step-1",
-    labelKey: "commands.help.dashboard.pages.setup_step_1",
-    titleKey: "commands.help.setup.step1_title",
-    descriptionKey: "commands.help.setup.step1_description",
-    docsPath: DOCS_PATHS.API_KEYS,
+    id: "personal-profile",
+    labelKey: "commands.help.dashboard.sections.personal_profile",
+    pickerDescriptionKey: "commands.help.dashboard.sections.personal_profile_description",
+    titleKey: "commands.help.personal_profile.title",
+    descriptionKey: "commands.help.personal_profile.description",
+    docsPath: DOCS_PATHS.PERSONALIZATION,
     sections: [],
-    introTitleKey: "commands.help.dashboard.header_title",
-    introDescriptionKey: "commands.help.dashboard.header_description",
-    titleHeadingLevel: 3,
-    showProviderPicker: true,
-    providerPickerFooterKey: "commands.help.setup.provider_picker_footer",
-  },
-  {
-    id: "setup-step-2",
-    labelKey: "commands.help.dashboard.pages.setup_step_2",
-    titleKey: "commands.help.setup.step2_title",
-    descriptionKey: "commands.help.setup.step2_description",
-    docsPath: DOCS_PATHS.QUICKSTART,
-    sections: [],
-    titleHeadingLevel: 3,
-    variables: () => ({
-      configSetup: mention("setup"),
-      expressionsInitialize: mention("expressions", "initialize"),
-    }),
-  },
-  {
-    id: "setup-step-3",
-    labelKey: "commands.help.dashboard.pages.setup_step_3",
-    titleKey: "commands.help.setup.step3_title",
-    descriptionKey: "commands.help.setup.step3_description",
-    docsPath: DOCS_PATHS.QUICKSTART,
-    sections: [],
-    titleHeadingLevel: 3,
-    variables: (locale) => ({
-      personaTrigger: configPage(locale, "commands.help.breadcrumbs.persona.general"),
-      configPermissions: configPage(locale, "commands.help.breadcrumbs.plugins.available-tools"),
-      serverAutotrigger: configPage(locale, "commands.help.breadcrumbs.channels.auto-trigger"),
-    }),
-  },
-  {
-    id: "setup-step-4",
-    labelKey: "commands.help.dashboard.pages.setup_step_4",
-    titleKey: "commands.help.setup.step4_title",
-    descriptionKey: "commands.help.setup.step4_description",
-    docsPath: DOCS_PATHS.QUICKSTART,
-    sections: [
-      { titleKey: "commands.help.setup.need_help_title", bodyKey: "commands.help.setup.need_help_description" },
-    ],
-    titleHeadingLevel: 3,
-    variables: (locale) => ({
-      persona: mention("persona"),
-      personal: mention("personal"),
-      memory: mention("memories"),
-      config: mention("config"),
-      helpFeatures: buildHelpPageReference(locale, "commands.help.dashboard.pages.features"),
-      helpMemory: buildHelpPageReference(locale, "commands.help.dashboard.pages.persistent_memory"),
-      helpCustomization: buildHelpPageReference(locale, "commands.help.dashboard.pages.customization"),
-      supportServer: mention("support", "discord"),
-      legalNotice: legalNoticeSuffix(locale, "general.legal.setup_agreement"),
-    }),
-  },
-] as const;
-
-const featureOverviewPage: HelpPageDefinition = {
-  id: "features",
-  labelKey: "commands.help.dashboard.pages.features",
-  titleKey: "commands.help.features.title",
-  descriptionKey: "commands.help.features.embed_description",
-  docsPath: DOCS_PATHS.FEATURES,
-  sections: [
-    {
-      titleKey: "commands.help.features.summary_chat_title",
-      bodyKey: "commands.help.features.summary_chat_description",
-    },
-    {
-      titleKey: "commands.help.features.summary_knowledge_title",
-      bodyKey: "commands.help.features.summary_knowledge_description",
-    },
-    {
-      titleKey: "commands.help.features.summary_capabilities_title",
-      bodyKey: "commands.help.features.summary_capabilities_description",
-    },
-    {
-      titleKey: "commands.help.features.summary_reference_title",
-      bodyKey: "commands.help.features.summary_reference_description",
-    },
-  ],
-  footerKey: "commands.help.features.footer",
-  variables: () => ({ version: packageVersion }),
-};
-
-function customEndpointVariables(locale: string): HelpVariables {
-  return {
-    add_command: mention("providers"),
-    remove_command: mention("providers"),
-    server_add_command: mention("providers"),
-    personal_add_command: mention("personal", "providers"),
-    text_command: configPage(locale, "commands.help.breadcrumbs.models.switch"),
-    image_command: configPage(locale, "commands.help.breadcrumbs.models.switch"),
-    video_command: configPage(locale, "commands.help.breadcrumbs.models.switch"),
-  };
-}
-
-function speechVariables(locale: string): HelpVariables {
-  return {
-    custom_endpoint_add: mention("providers"),
-    model_speech: mention("providers"),
-    voice_add: mention("config"),
-    voice_assign: mention("config"),
-    voice_design_set: mention("config"),
-    elevenlabs: mention("providers"),
-    help_transcription: buildHelpPageReference(locale, "commands.help.dashboard.pages.transcription"),
-  };
-}
-
-function speechVariant(id: string, labelKey: string): HelpVariantDefinition {
-  return {
-    id,
-    labelKey,
-    titleKey: `commands.help.speech.${id}.title`,
-    descriptionKey: `commands.help.speech.${id}.description`,
-    docsPath: DOCS_PATHS.TTS,
-    sections: [{ titleKey: "commands.help.speech.summary_title", bodyKey: "commands.help.speech.summary_description" }],
-    variables: speechVariables,
-  };
-}
-
-function transcriptionVariables(locale: string): HelpVariables {
-  return {
-    custom_endpoint_add: mention("providers"),
-    model_transcription: mention("providers"),
-    elevenlabs: mention("providers"),
-    speech_transcripts: configPage(locale, "commands.help.breadcrumbs.behavior.notices"),
-    help_speech: buildHelpPageReference(locale, "commands.help.dashboard.pages.speech"),
-  };
-}
-
-function transcriptionVariant(id: string, labelKey: string): HelpVariantDefinition {
-  return {
-    id,
-    labelKey,
-    titleKey: `commands.help.transcription.${id}.title`,
-    descriptionKey: `commands.help.transcription.${id}.description`,
-    docsPath: DOCS_PATHS.STT,
-    sections: [
+    variants: [
       {
-        titleKey: "commands.help.transcription.summary_title",
-        bodyKey: "commands.help.transcription.summary_description",
-      },
-    ],
-    variables: transcriptionVariables,
-  };
-}
-
-const featurePages: readonly HelpPageDefinition[] = [
-  featureOverviewPage,
-  {
-    id: "personal-providers",
-    labelKey: "commands.help.dashboard.pages.personal_providers",
-    titleKey: "commands.help.personal-provider.title",
-    descriptionKey: "commands.help.personal-provider.description_body",
-    docsPath: DOCS_PATHS.PERSONAL_PROVIDERS,
-    sections: [
-      {
-        titleKey: "commands.help.personal-provider.setup_field",
-        bodyKey: "commands.help.personal-provider.setup_value",
-      },
-      {
-        titleKey: "commands.help.personal-provider.behavior_field",
-        bodyKey: "commands.help.personal-provider.behavior_value",
-      },
-      { titleKey: "commands.help.personal-provider.byok_field", bodyKey: "commands.help.personal-provider.byok_value" },
-    ],
-    footerKey: "commands.help.personal-provider.footer",
-    variables: () => ({
-      add_command: mention("personal", "providers"),
-      model_command: mention("personal", "config"),
-      toggle_command: mention("personal", "providers"),
-      samplers_command: mention("personal", "config"),
-      fallback_command: mention("personal", "config"),
-      byok_command: mention("moderation"),
-    }),
-  },
-  {
-    id: "custom-endpoints",
-    labelKey: "commands.help.dashboard.pages.custom_endpoints",
-    titleKey: "commands.help.custom_models.title",
-    descriptionKey: "commands.help.custom_models.description_body",
-    docsPath: DOCS_PATHS.CUSTOM_ENDPOINTS,
-    sections: [
-      { titleKey: "commands.help.custom_models.server_field", bodyKey: "commands.help.custom_models.server_value" },
-      {
-        titleKey: "commands.help.custom_models.personal_field",
-        bodyKey: "commands.help.custom_models.personal_value",
-        variables: () => ({
-          add_command: mention("personal", "providers"),
-          remove_command: mention("personal", "providers"),
+        id: "nickname-pronouns",
+        labelKey: "commands.help.dashboard.subsections.nickname_pronouns",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.nickname_pronouns_description",
+        titleKey: "commands.help.personal_profile.nickname_pronouns.title",
+        descriptionKey: "commands.help.personal_profile.nickname_pronouns.description",
+        docsPath: DOCS_PATHS.PERSONALIZATION,
+        sections: [],
+        footerKey: "commands.help.personal_profile.nickname_pronouns.footer",
+        variables: (locale) => ({
+          personalProfile: personalConfigPage(locale, "commands.help.breadcrumbs.personal.profile.general"),
         }),
       },
       {
-        titleKey: "commands.help.custom_models.selection_field",
-        bodyKey: "commands.help.custom_models.selection_summary_value",
+        id: "personal-memories",
+        labelKey: "commands.help.dashboard.subsections.personal_memories",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.personal_memories_description",
+        titleKey: "commands.help.personal_profile.personal_memories.title",
+        descriptionKey: "commands.help.personal_profile.personal_memories.description",
+        docsPath: DOCS_PATHS.PERSONALIZATION,
+        sections: [],
+        footerKey: "commands.help.personal_profile.personal_memories.footer",
+        variables: (locale) => ({
+          personalMemories: mention("personal", "memories"),
+          personalPrivacy: personalConfigPage(locale, "commands.help.breadcrumbs.personal.privacy.controls"),
+        }),
+      },
+      {
+        id: "personal-providers",
+        labelKey: "commands.help.dashboard.subsections.personal_providers",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.personal_providers_description",
+        titleKey: "commands.help.personal_profile.personal_providers.title",
+        descriptionKey: "commands.help.personal_profile.personal_providers.description",
+        docsPath: DOCS_PATHS.PERSONAL_PROVIDERS,
+        sections: [],
+        variables: (locale) => ({
+          personalProviders: mention("personal", "providers"),
+          personalModels: personalConfigPage(locale, "commands.help.breadcrumbs.personal.models.switch"),
+        }),
       },
     ],
-    variables: customEndpointVariables,
+  },
+  {
+    id: "custom-endpoints",
+    labelKey: "commands.help.dashboard.sections.custom_endpoints",
+    pickerDescriptionKey: "commands.help.dashboard.sections.custom_endpoints_description",
+    titleKey: "commands.help.custom_endpoints.title",
+    descriptionKey: "commands.help.custom_endpoints.description",
+    docsPath: DOCS_PATHS.CUSTOM_ENDPOINTS,
+    sections: [],
+    variables: () => ({
+      providers: mention("providers"),
+      personalProviders: mention("personal", "providers"),
+    }),
     variants: [
       {
-        id: "overview",
-        labelKey: "commands.help.custom_models.choice_overview",
-        titleKey: "commands.help.custom_models.title",
-        descriptionKey: "commands.help.custom_models.description_body",
+        id: "text-models",
+        labelKey: "commands.help.dashboard.subsections.text_models",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.text_models_description",
+        titleKey: "commands.help.custom_endpoints.text_models.title",
+        descriptionKey: "commands.help.custom_endpoints.text_models.description",
         docsPath: DOCS_PATHS.CUSTOM_ENDPOINTS,
-        sections: [
-          { titleKey: "commands.help.custom_models.server_field", bodyKey: "commands.help.custom_models.server_value" },
-          {
-            titleKey: "commands.help.custom_models.personal_field",
-            bodyKey: "commands.help.custom_models.personal_value",
-            variables: () => ({
-              add_command: mention("personal", "providers"),
-              remove_command: mention("personal", "providers"),
-            }),
-          },
-          {
-            titleKey: "commands.help.custom_models.selection_field",
-            bodyKey: "commands.help.custom_models.selection_summary_value",
-          },
-        ],
-        variables: customEndpointVariables,
+        sections: [],
+        footerKey: "commands.help.custom_endpoints.text_models.footer",
+        variables: (locale) => ({
+          configSwitchModels: configPage(locale, "commands.help.breadcrumbs.models.switch"),
+        }),
       },
       {
         id: "comfyui",
-        labelKey: "commands.help.custom_models.choice_comfyui",
-        titleKey: "commands.help.custom_models.comfyui_page1_title",
-        descriptionKey: "commands.help.custom_models.comfyui_summary_description",
+        labelKey: "commands.help.dashboard.subsections.comfyui",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.comfyui_description",
+        titleKey: "commands.help.custom_endpoints.comfyui.title",
+        descriptionKey: "commands.help.custom_endpoints.comfyui.description",
         docsPath: DOCS_PATHS.COMFYUI_SETUP,
-        sections: [
-          {
-            titleKey: "commands.help.custom_models.comfyui_summary_register_field",
-            bodyKey: "commands.help.custom_models.comfyui_summary_register_value",
-          },
-        ],
-        variables: customEndpointVariables,
+        sections: [],
+        footerKey: "commands.help.custom_endpoints.comfyui.footer",
       },
-    ],
-  },
-  {
-    id: "speech",
-    labelKey: "commands.help.dashboard.pages.speech",
-    titleKey: "commands.help.speech.overview.title",
-    descriptionKey: "commands.help.speech.overview.description",
-    docsPath: DOCS_PATHS.TTS,
-    sections: [{ titleKey: "commands.help.speech.summary_title", bodyKey: "commands.help.speech.summary_description" }],
-    variables: speechVariables,
-    variants: [
-      speechVariant("overview", "commands.help.dashboard.variants.overview"),
-      speechVariant("chatterbox", "commands.help.dashboard.variants.chatterbox"),
-      speechVariant("qwen3tts", "commands.help.dashboard.variants.qwen3tts"),
-      speechVariant("irodoritts", "commands.help.dashboard.variants.irodoritts"),
-      speechVariant("elevenlabs", "commands.help.dashboard.variants.elevenlabs"),
-    ],
-  },
-  {
-    id: "transcription",
-    labelKey: "commands.help.dashboard.pages.transcription",
-    titleKey: "commands.help.transcription.overview.title",
-    descriptionKey: "commands.help.transcription.overview.description",
-    docsPath: DOCS_PATHS.STT,
-    sections: [
       {
-        titleKey: "commands.help.transcription.summary_title",
-        bodyKey: "commands.help.transcription.summary_description",
+        id: "text-to-speech",
+        labelKey: "commands.help.dashboard.subsections.text_to_speech",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.text_to_speech_description",
+        titleKey: "commands.help.custom_endpoints.text_to_speech.title",
+        descriptionKey: "commands.help.custom_endpoints.text_to_speech.description",
+        docsPath: DOCS_PATHS.TTS,
+        sections: [],
+        footerKey: "commands.help.custom_endpoints.text_to_speech.footer",
+        variables: (locale) => ({
+          configPersonaVoice: configPage(locale, "commands.help.breadcrumbs.persona.voice"),
+          configVoices: configPage(locale, "commands.help.breadcrumbs.models.voices"),
+        }),
       },
     ],
-    variables: transcriptionVariables,
-    variants: [
-      transcriptionVariant("overview", "commands.help.dashboard.variants.overview"),
-      transcriptionVariant("whisperx", "commands.help.dashboard.variants.whisperx"),
-      transcriptionVariant("koboldcpp", "commands.help.dashboard.variants.koboldcpp"),
-      transcriptionVariant("elevenlabs", "commands.help.dashboard.variants.elevenlabs"),
-    ],
   },
-] as const;
+];
 
-const memoryPages: readonly HelpPageDefinition[] = [
+const featurePages: readonly HelpPageDefinition[] = [
   {
-    id: "persistent-memory",
-    labelKey: "commands.help.dashboard.pages.persistent_memory",
-    titleKey: "commands.help.memory.title",
-    descriptionKey: "commands.help.memory.embed_description",
-    docsPath: DOCS_PATHS.MEMORY,
-    sections: [
-      { titleKey: "commands.help.memory.teaching_title", bodyKey: "commands.help.memory.teaching_description" },
-      { titleKey: "commands.help.memory.forgetting_title", bodyKey: "commands.help.memory.forgetting_description" },
-      { titleKey: "commands.help.memory.how_it_works_title", bodyKey: "commands.help.memory.how_it_works_description" },
-      { titleKey: "commands.help.memory.tips_title", bodyKey: "commands.help.memory.tips_description" },
-      { titleKey: "commands.help.memory.documents_title", bodyKey: "commands.help.memory.documents_description" },
-      { titleKey: "commands.help.memory.shortterm_title", bodyKey: "commands.help.memory.shortterm_description" },
-    ],
-    variables: (locale) => ({
-      memoryPersonalAdd: mention("personal", "memories"),
-      memoryPersonalRemove: mention("personal", "memories"),
-      memoryPersonalExport: mention("export", "personal", "memories"),
-      memoryServerAdd: mention("memories"),
-      memoryServerRemove: mention("memories"),
-      memoryServerExport: mention("export", "memories"),
-      status: mention("status"),
-      helpCustomization: buildHelpPageReference(locale, "commands.help.dashboard.pages.customization"),
-      personalStm: mention("personal", "config"),
-      personalStmClear: mention("personal", "memories"),
-      legalNotice: legalNoticeSuffix(locale, "general.legal.data_handling_reference"),
-    }),
-  },
-  {
-    id: "short-term-memory",
-    labelKey: "commands.help.dashboard.pages.short_term_memory",
-    titleKey: "commands.help.stm.title",
-    descriptionKey: "commands.help.stm.embed_description",
-    docsPath: DOCS_PATHS.SHORT_TERM_MEMORY,
-    sections: [
-      { titleKey: "commands.help.stm.parameters_title", bodyKey: "commands.help.stm.parameters_description" },
-      { titleKey: "commands.help.stm.nudge_title", bodyKey: "commands.help.stm.nudge_description" },
-      { titleKey: "commands.help.stm.categories_title", bodyKey: "commands.help.stm.categories_description" },
-      { titleKey: "commands.help.stm.prompts_title", bodyKey: "commands.help.stm.prompts_description" },
-      { titleKey: "commands.help.stm.manage_title", bodyKey: "commands.help.stm.manage_description" },
-    ],
-    variables: (locale) => ({
-      helpMemory: buildHelpPageReference(locale, "commands.help.dashboard.pages.persistent_memory"),
-      stmParameters: configPage(locale, "commands.help.breadcrumbs.behavior.memory"),
-      stmPromptEdit: configPage(locale, "commands.help.breadcrumbs.behavior.memory"),
-      stmCategoriesEdit: configPage(locale, "commands.help.breadcrumbs.behavior.memory"),
-      stmManage: mention("memories"),
-      stmPrivacyBypass: configPage(locale, "commands.help.breadcrumbs.channels.rules"),
-      personaStmEdit: configPage(locale, "commands.help.breadcrumbs.persona.memories"),
-    }),
-  },
-  {
-    id: "memory-tagging",
-    labelKey: "commands.help.dashboard.pages.memory_tagging",
-    titleKey: "commands.help.memory-tagging.title",
-    descriptionKey: "commands.help.memory-tagging.embed_description",
-    docsPath: DOCS_PATHS.MEMORY_TAGGING,
-    sections: [
-      {
-        titleKey: "commands.help.memory-tagging.keywords_title",
-        bodyKey: "commands.help.memory-tagging.keywords_description",
-      },
-      {
-        titleKey: "commands.help.memory-tagging.channels_title",
-        bodyKey: "commands.help.memory-tagging.channels_description",
-      },
-    ],
-    variables: (locale) => ({
-      memoryTaggingSet: configPage(locale, "commands.help.breadcrumbs.behavior.memory"),
-      toolPromptSnapshot: mention("tool", "prompt", "snapshot"),
-    }),
-  },
-] as const;
-
-const behaviorPages: readonly HelpPageDefinition[] = [
-  {
-    id: "customization",
-    labelKey: "commands.help.dashboard.pages.customization",
-    titleKey: "commands.help.customization.embed1_title",
-    descriptionKey: "commands.help.customization.embed1_description",
+    id: "multiple-personas",
+    labelKey: "commands.help.dashboard.sections.multiple_personas",
+    pickerDescriptionKey: "commands.help.dashboard.sections.multiple_personas_description",
+    titleKey: "commands.help.multiple_personas.title",
+    descriptionKey: "commands.help.multiple_personas.description",
     docsPath: DOCS_PATHS.MULTIPLE_PERSONAS,
     sections: [
       {
-        titleKey: "commands.help.customization.summary_personas_title",
-        bodyKey: "commands.help.customization.summary_personas_description",
+        titleKey: "commands.help.multiple_personas.mains_alters_title",
+        bodyKey: "commands.help.multiple_personas.mains_alters_body",
       },
       {
-        titleKey: "commands.help.customization.summary_behavior_title",
-        bodyKey: "commands.help.customization.summary_behavior_description",
+        titleKey: "commands.help.multiple_personas.bringing_in_title",
+        bodyKey: "commands.help.multiple_personas.bringing_in_body",
       },
       {
-        titleKey: "commands.help.customization.summary_server_title",
-        bodyKey: "commands.help.customization.summary_server_description",
+        titleKey: "commands.help.multiple_personas.where_to_find_title",
+        bodyKey: "commands.help.multiple_personas.where_to_find_body",
+      },
+      {
+        titleKey: "commands.help.multiple_personas.talking_title",
+        bodyKey: "commands.help.multiple_personas.talking_body",
       },
     ],
+    footerKey: "commands.help.multiple_personas.footer",
     variables: (locale) => ({
-      helpMemory: buildHelpPageReference(locale, "commands.help.dashboard.pages.persistent_memory"),
-      personaCreate: mention("persona", "create"),
-      personaGenerate: mention("persona", "generate"),
-      personaAttributeAdd: configPage(locale, "commands.help.breadcrumbs.persona.general"),
-      personaSampleDialogueAdd: configPage(locale, "commands.help.breadcrumbs.persona.general"),
-      configModel: configPage(locale, "commands.help.breadcrumbs.models.switch"),
-      configHumanizer: configPage(locale, "commands.help.breadcrumbs.behavior.general"),
-      configSystemPromptSet: configPage(locale, "commands.help.breadcrumbs.behavior.general"),
-      capabilitiesManage: configPage(locale, "commands.help.breadcrumbs.plugins.available-tools"),
-      serverWhitelistChannel: mention("moderation"),
+      personaImport: mention("persona", "import"),
+      configPersonaAppearance: configPage(locale, "commands.help.breadcrumbs.persona.general"),
+      configPersonaSprites: configPage(locale, "commands.help.breadcrumbs.persona.sprites"),
+      configPersonaTriggers: configPage(locale, "commands.help.breadcrumbs.persona.triggers"),
+      personaExport: mention("persona", "export"),
     }),
   },
   {
-    id: "personal-spotlight",
-    labelKey: "commands.help.dashboard.pages.personal_spotlight",
-    titleKey: "commands.help.spotlight.title",
-    descriptionKey: "commands.help.spotlight.embed_description",
-    docsPath: DOCS_PATHS.PERSONAL_SPOTLIGHT,
-    sections: [
-      { titleKey: "commands.help.spotlight.what_title", bodyKey: "commands.help.spotlight.what_description" },
-      { titleKey: "commands.help.spotlight.set_title", bodyKey: "commands.help.spotlight.set_description" },
+    id: "media-generation",
+    labelKey: "commands.help.dashboard.sections.media_generation",
+    pickerDescriptionKey: "commands.help.dashboard.sections.media_generation_description",
+    titleKey: "commands.help.media_generation.title",
+    descriptionKey: "commands.help.media_generation.description",
+    docsPath: DOCS_PATHS.MEDIA_GENERATION,
+    sections: [],
+    variants: [
       {
-        titleKey: "commands.help.spotlight.auto_trigger_title",
-        bodyKey: "commands.help.spotlight.auto_trigger_description",
+        id: "image-generation",
+        labelKey: "commands.help.dashboard.subsections.image_generation",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.image_generation_description",
+        titleKey: "commands.help.media_generation.image_generation.title",
+        descriptionKey: "commands.help.media_generation.image_generation.description",
+        docsPath: DOCS_PATHS.MEDIA_GENERATION,
+        sections: [],
+        footerKey: "commands.help.media_generation.image_generation.footer",
+        variables: (locale) => ({
+          generateImage: mention("generate", "image"),
+          providers: mention("providers"),
+          configImageDefaults: configPage(locale, "commands.help.breadcrumbs.models.image"),
+        }),
       },
-      { titleKey: "commands.help.spotlight.rules_title", bodyKey: "commands.help.spotlight.rules_description" },
-      { titleKey: "commands.help.spotlight.manage_title", bodyKey: "commands.help.spotlight.manage_description" },
+      {
+        id: "video-generation",
+        labelKey: "commands.help.dashboard.subsections.video_generation",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.video_generation_description",
+        titleKey: "commands.help.media_generation.video_generation.title",
+        descriptionKey: "commands.help.media_generation.video_generation.description",
+        docsPath: DOCS_PATHS.MEDIA_GENERATION,
+        sections: [],
+        variables: () => ({
+          generateVideo: mention("generate", "video"),
+          providers: mention("providers"),
+        }),
+      },
+      {
+        id: "speech-generation",
+        labelKey: "commands.help.dashboard.subsections.speech_generation",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.speech_generation_description",
+        titleKey: "commands.help.media_generation.speech_generation.title",
+        descriptionKey: "commands.help.media_generation.speech_generation.description",
+        docsPath: DOCS_PATHS.TTS,
+        sections: [],
+        variables: (locale) => ({
+          generateVoice: mention("generate", "voice-message"),
+          configPersonaVoice: configPage(locale, "commands.help.breadcrumbs.persona.voice"),
+        }),
+      },
     ],
-    footerKey: "commands.help.spotlight.footer",
+  },
+  {
+    id: "tons-of-tweakability",
+    labelKey: "commands.help.dashboard.sections.tons_of_tweakability",
+    pickerDescriptionKey: "commands.help.dashboard.sections.tons_of_tweakability_description",
+    titleKey: "commands.help.tons_of_tweakability.title",
+    descriptionKey: "commands.help.tons_of_tweakability.description",
+    docsPath: DOCS_PATHS.BEHAVIOR_TWEAKING,
+    sections: [],
+    variants: [
+      {
+        id: "behavior-tuning",
+        labelKey: "commands.help.dashboard.subsections.behavior_tuning",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.behavior_tuning_description",
+        titleKey: "commands.help.tons_of_tweakability.behavior_tuning.title",
+        descriptionKey: "commands.help.tons_of_tweakability.behavior_tuning.description",
+        docsPath: DOCS_PATHS.BEHAVIOR_TWEAKING,
+        sections: [],
+        footerKey: "commands.help.tons_of_tweakability.behavior_tuning.footer",
+        variables: (locale) => ({
+          configSwitchModels: configPage(locale, "commands.help.breadcrumbs.models.switch"),
+          configBehaviorGeneral: configPage(locale, "commands.help.breadcrumbs.behavior.general"),
+          configTools: configPage(locale, "commands.help.breadcrumbs.plugins.available-tools"),
+          configParameters: configPage(locale, "commands.help.breadcrumbs.models.parameters"),
+        }),
+      },
+      {
+        id: "server-wide-settings",
+        labelKey: "commands.help.dashboard.subsections.server_wide_settings",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.server_wide_settings_description",
+        titleKey: "commands.help.tons_of_tweakability.server_wide_settings.title",
+        descriptionKey: "commands.help.tons_of_tweakability.server_wide_settings.description",
+        docsPath: DOCS_PATHS.CHATTING_TRIGGERS,
+        sections: [],
+        footerKey: "commands.help.tons_of_tweakability.server_wide_settings.footer",
+        variables: (locale) => ({
+          moderation: mention("moderation"),
+          configAutoTrigger: configPage(locale, "commands.help.breadcrumbs.channels.auto-trigger"),
+          configWelcome: configPage(locale, "commands.help.breadcrumbs.channels.destinations"),
+          configChannelOverrides: configPage(locale, "commands.help.breadcrumbs.channels.overrides"),
+        }),
+      },
+      {
+        id: "personal-settings",
+        labelKey: "commands.help.dashboard.subsections.personal_settings",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.personal_settings_description",
+        titleKey: "commands.help.tons_of_tweakability.personal_settings.title",
+        descriptionKey: "commands.help.tons_of_tweakability.personal_settings.description",
+        docsPath: DOCS_PATHS.PERSONALIZATION,
+        sections: [],
+        footerKey: "commands.help.tons_of_tweakability.personal_settings.footer",
+        variables: (locale) => ({
+          personalProfile: personalConfigPage(locale, "commands.help.breadcrumbs.personal.profile.general"),
+          personalProviders: mention("personal", "providers"),
+          personalConfig: mention("personal", "config"),
+          personalSpotlight: personalConfigPage(locale, "commands.help.breadcrumbs.personal.advanced.spotlight"),
+        }),
+      },
+    ],
+  },
+  {
+    id: "memory",
+    labelKey: "commands.help.dashboard.sections.memory",
+    pickerDescriptionKey: "commands.help.dashboard.sections.memory_description",
+    titleKey: "commands.help.memory_catalog.title",
+    descriptionKey: "commands.help.memory_catalog.description",
+    docsPath: DOCS_PATHS.MEMORY,
+    sections: [],
+    variants: [
+      {
+        id: "long-term-memory",
+        labelKey: "commands.help.dashboard.subsections.long_term_memory",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.long_term_memory_description",
+        titleKey: "commands.help.memory_catalog.long_term_memory.title",
+        descriptionKey: "commands.help.memory_catalog.long_term_memory.description",
+        docsPath: DOCS_PATHS.MEMORY,
+        sections: [],
+        variables: () => ({
+          memories: mention("memories"),
+          personalMemories: mention("personal", "memories"),
+        }),
+      },
+      {
+        id: "short-term-memory",
+        labelKey: "commands.help.dashboard.subsections.short_term_memory",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.short_term_memory_description",
+        titleKey: "commands.help.memory_catalog.short_term_memory.title",
+        descriptionKey: "commands.help.memory_catalog.short_term_memory.description",
+        docsPath: DOCS_PATHS.SHORT_TERM_MEMORY,
+        sections: [],
+        footerKey: "commands.help.memory_catalog.short_term_memory.footer",
+        variables: (locale) => ({
+          configAdvancedMemory: configPage(locale, "commands.help.breadcrumbs.behavior.memory"),
+          memories: mention("memories"),
+        }),
+      },
+      {
+        id: "rewards-punishments",
+        labelKey: "commands.help.dashboard.subsections.rewards_punishments",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.rewards_punishments_description",
+        titleKey: "commands.help.memory_catalog.rewards_punishments.title",
+        descriptionKey: "commands.help.memory_catalog.rewards_punishments.description",
+        docsPath: DOCS_PATHS.MEMORY,
+        sections: [],
+        footerKey: "commands.help.memory_catalog.rewards_punishments.footer",
+        variables: () => ({
+          reward: mention("reward"),
+          punish: mention("punish"),
+        }),
+      },
+      {
+        id: "memory-tagging",
+        labelKey: "commands.help.dashboard.subsections.memory_tagging",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.memory_tagging_description",
+        titleKey: "commands.help.memory_catalog.memory_tagging.title",
+        descriptionKey: "commands.help.memory_catalog.memory_tagging.description",
+        docsPath: DOCS_PATHS.MEMORY_TAGGING,
+        sections: [],
+        footerKey: "commands.help.memory_catalog.memory_tagging.footer",
+        variables: (locale) => ({
+          configAdvancedMemory: configPage(locale, "commands.help.breadcrumbs.behavior.memory"),
+          toolPromptSnapshot: mention("tool", "prompt", "snapshot"),
+        }),
+      },
+    ],
+  },
+  {
+    id: "scheduled-tasks",
+    labelKey: "commands.help.dashboard.sections.scheduled_tasks",
+    pickerDescriptionKey: "commands.help.dashboard.sections.scheduled_tasks_description",
+    titleKey: "commands.help.scheduled_tasks.title",
+    descriptionKey: "commands.help.scheduled_tasks.description",
+    docsPath: DOCS_PATHS.SCHEDULED_TASKS,
+    sections: [
+      {
+        titleKey: "commands.help.scheduled_tasks.making_title",
+        bodyKey: "commands.help.scheduled_tasks.making_body",
+      },
+      {
+        titleKey: "commands.help.scheduled_tasks.changing_title",
+        bodyKey: "commands.help.scheduled_tasks.changing_body",
+      },
+      {
+        titleKey: "commands.help.scheduled_tasks.who_title",
+        bodyKey: "commands.help.scheduled_tasks.who_body",
+      },
+    ],
     variables: () => ({
-      personalSpotlightSet: mention("personal", "config"),
-      personalSpotlightManage: mention("personal", "config"),
-      serverWhitelistPersona: mention("moderation"),
+      scheduledTaskEdit: mention("scheduled-task", "edit"),
+      scheduledTaskRemove: mention("scheduled-task", "remove"),
     }),
   },
+];
+
+const moderationPages: readonly HelpPageDefinition[] = [
   {
-    id: "deliberate-trigger-mode",
-    labelKey: "commands.help.dashboard.pages.deliberate_trigger_mode",
-    titleKey: "commands.help.deliberate-trigger-mode.title",
-    descriptionKey: "commands.help.deliberate-trigger-mode.embed_description",
-    docsPath: `${DOCS_PATHS.CHATTING_TRIGGERS}#deliberate-trigger-mode`,
-    sections: [
+    id: "server-moderation",
+    labelKey: "commands.help.dashboard.sections.server_moderation",
+    pickerDescriptionKey: "commands.help.dashboard.sections.server_moderation_description",
+    titleKey: "commands.help.server_moderation.title",
+    descriptionKey: "commands.help.server_moderation.description",
+    docsPath: DOCS_PATHS.SERVER_MODERATION,
+    sections: [],
+    variables: () => ({
+      moderation: mention("moderation"),
+    }),
+    variants: [
       {
-        titleKey: "commands.help.deliberate-trigger-mode.normal_title",
-        bodyKey: "commands.help.deliberate-trigger-mode.normal_description",
-      },
-      {
-        titleKey: "commands.help.deliberate-trigger-mode.enabled_title",
-        bodyKey: "commands.help.deliberate-trigger-mode.enabled_description",
-      },
-      {
-        titleKey: "commands.help.deliberate-trigger-mode.personal_title",
-        bodyKey: "commands.help.deliberate-trigger-mode.personal_description",
+        id: "blacklisting",
+        labelKey: "commands.help.dashboard.subsections.blacklisting",
+        pickerDescriptionKey: "commands.help.dashboard.subsections.blacklisting_description",
+        titleKey: "commands.help.server_moderation.blacklisting.title",
+        descriptionKey: "commands.help.server_moderation.blacklisting.description",
+        docsPath: DOCS_PATHS.SERVER_MODERATION,
+        sections: [],
+        footerKey: "commands.help.server_moderation.blacklisting.footer",
+        variables: (locale) => ({
+          moderationBlacklist: moderationPage(locale, "commands.help.breadcrumbs.moderation.user-blacklist"),
+        }),
       },
     ],
-    footerKey: "commands.help.deliberate-trigger-mode.footer",
-    variables: (locale) => ({
-      serverDtm: configPage(locale, "commands.help.breadcrumbs.behavior.trigger"),
-      personalDtm: mention("personal", "config"),
-      respondCommand: mention("respond"),
-    }),
   },
   {
-    id: "deliberate-tool-mode",
-    labelKey: "commands.help.dashboard.pages.deliberate_tool_mode",
-    titleKey: "commands.help.deliberate-tool-mode.title",
-    descriptionKey: "commands.help.deliberate-tool-mode.embed_description",
-    docsPath: DOCS_PATHS.DELIBERATE_TOOL_MODE,
+    id: "quotas",
+    labelKey: "commands.help.dashboard.sections.quotas",
+    pickerDescriptionKey: "commands.help.dashboard.sections.quotas_description",
+    titleKey: "commands.help.quotas.title",
+    descriptionKey: "commands.help.quotas.description",
+    docsPath: DOCS_PATHS.QUOTAS,
     sections: [
       {
-        titleKey: "commands.help.deliberate-tool-mode.what_title",
-        bodyKey: "commands.help.deliberate-tool-mode.what_description",
+        titleKey: "commands.help.quotas.spent_title",
+        bodyKey: "commands.help.quotas.spent_body",
       },
       {
-        titleKey: "commands.help.deliberate-tool-mode.intent_title",
-        bodyKey: "commands.help.deliberate-tool-mode.intent_description",
+        titleKey: "commands.help.quotas.limits_title",
+        bodyKey: "commands.help.quotas.limits_body",
       },
       {
-        titleKey: "commands.help.deliberate-tool-mode.custom_title",
-        bodyKey: "commands.help.deliberate-tool-mode.custom_description",
-      },
-      {
-        titleKey: "commands.help.deliberate-tool-mode.control_title",
-        bodyKey: "commands.help.deliberate-tool-mode.control_description",
+        titleKey: "commands.help.quotas.starting_over_title",
+        bodyKey: "commands.help.quotas.starting_over_body",
       },
     ],
-    footerKey: "commands.help.deliberate-tool-mode.footer",
+    footerKey: "commands.help.quotas.footer",
     variables: (locale) => ({
-      serverDtm: configPage(locale, "commands.help.breadcrumbs.behavior.experimental"),
-      personalDtm: mention("personal", "config"),
-      triggerCommand: configPage(locale, "commands.help.breadcrumbs.behavior.experimental"),
-      thoughtLogs: configPage(locale, "commands.help.breadcrumbs.channels.destinations"),
+      moderationQuotas: moderationPage(locale, "commands.help.breadcrumbs.moderation.quotas"),
+      quotaResetUser: mention("quota", "reset", "user"),
+      quotaResetGlobal: mention("quota", "reset", "global"),
     }),
   },
   {
     id: "age-restricted-commands",
-    labelKey: "commands.help.dashboard.pages.age_restricted_commands",
-    titleKey: "commands.help.nsfw.title",
-    descriptionKey: "commands.help.nsfw.embed_description",
+    labelKey: "commands.help.dashboard.sections.age_restricted_commands",
+    pickerDescriptionKey: "commands.help.dashboard.sections.age_restricted_commands_description",
+    titleKey: "commands.help.age_restricted_commands.title",
+    descriptionKey: "commands.help.age_restricted_commands.description",
     docsPath: DOCS_PATHS.AGE_RESTRICTED_COMMANDS,
     sections: [
-      { titleKey: "commands.help.nsfw.enable_title", bodyKey: "commands.help.nsfw.enable_description" },
-      { titleKey: "commands.help.nsfw.channel_title", bodyKey: "commands.help.nsfw.channel_description" },
-      { titleKey: "commands.help.nsfw.warning_title", bodyKey: "commands.help.nsfw.warning_description" },
-    ],
-    footerKey: "commands.help.nsfw.footer",
-  },
-] as const;
-
-const integrationPages: readonly HelpPageDefinition[] = [
-  {
-    id: "matrix",
-    labelKey: "commands.help.dashboard.pages.matrix",
-    titleKey: "commands.help.matrix.title",
-    descriptionKey: "commands.help.matrix.embed_description",
-    docsPath: DOCS_PATHS.MATRIX_BRIDGE,
-    sections: [
-      { titleKey: "commands.help.matrix.setup_title", bodyKey: "commands.help.matrix.setup_description" },
-      { titleKey: "commands.help.matrix.room_id_title", bodyKey: "commands.help.matrix.room_id_description" },
-      { titleKey: "commands.help.matrix.usage_title", bodyKey: "commands.help.matrix.usage_description" },
-      { titleKey: "commands.help.matrix.limitations_title", bodyKey: "commands.help.matrix.limitations_description" },
       {
-        titleKey: "commands.help.matrix.troubleshooting_title",
-        bodyKey: "commands.help.matrix.troubleshooting_description",
+        titleKey: "commands.help.age_restricted_commands.filter_title",
+        bodyKey: "commands.help.age_restricted_commands.filter_body",
+      },
+      {
+        titleKey: "commands.help.age_restricted_commands.gated_title",
+        bodyKey: "commands.help.age_restricted_commands.gated_body",
       },
     ],
-    variables: (locale) => ({
-      botUserId: process.env.MATRIX_BOT_USER_ID ?? localizer(locale, "commands.help.matrix.bot_user_fallback"),
-      matrixLink: mention("matrix", "link"),
-      supportServer: mention("support", "discord"),
+    footerKey: "commands.help.age_restricted_commands.footer",
+    variables: () => ({
+      nsfw: mention("nsfw"),
+      nsfwJailbreaks: mention("nsfw", "jailbreaks"),
     }),
   },
   {
-    id: "mcp",
-    labelKey: "commands.help.dashboard.pages.mcp",
-    titleKey: "commands.help.mcp.title",
-    descriptionKey: "commands.help.mcp.description_text",
-    docsPath: DOCS_PATHS.MCP,
+    id: "user-byok",
+    labelKey: "commands.help.dashboard.sections.user_byok",
+    pickerDescriptionKey: "commands.help.dashboard.sections.user_byok_description",
+    titleKey: "commands.help.user_byok.title",
+    descriptionKey: "commands.help.user_byok.description",
+    docsPath: DOCS_PATHS.USER_BYOK,
     sections: [
-      { titleKey: "commands.help.mcp.online_title", bodyKey: "commands.help.mcp.online_summary_description" },
-      { titleKey: "commands.help.mcp.local_title", bodyKey: "commands.help.mcp.local_summary_description" },
-      { titleKey: "commands.help.mcp.security_title", bodyKey: "commands.help.mcp.security_description" },
+      {
+        titleKey: "commands.help.user_byok.changes_title",
+        bodyKey: "commands.help.user_byok.changes_body",
+      },
+      {
+        titleKey: "commands.help.user_byok.suits_title",
+        bodyKey: "commands.help.user_byok.suits_body",
+      },
+      {
+        titleKey: "commands.help.user_byok.members_title",
+        bodyKey: "commands.help.user_byok.members_body",
+      },
     ],
-    footerKey: "commands.help.mcp.footer",
+    footerKey: "commands.help.user_byok.footer",
     variables: (locale) => ({
-      mcpsCommand: configPage(locale, "commands.help.breadcrumbs.plugins.mcp-servers"),
-      configPlugins: configPage(locale, "commands.help.breadcrumbs.plugins.mcp-servers"),
+      moderationMemberAccess: moderationPage(locale, "commands.help.breadcrumbs.moderation.member-access"),
+      setup: mention("setup"),
+      personalProviders: mention("personal", "providers"),
     }),
   },
+];
+
+const pluginPages: readonly HelpPageDefinition[] = [
   {
     id: "sillytavern-presets",
-    labelKey: "commands.help.dashboard.pages.sillytavern_presets",
-    titleKey: "commands.help.st-preset.embed1_title",
-    descriptionKey: "commands.help.st-preset.embed1_description",
+    labelKey: "commands.help.dashboard.sections.sillytavern_presets",
+    pickerDescriptionKey: "commands.help.dashboard.sections.sillytavern_presets_description",
+    titleKey: "commands.help.sillytavern_presets.title",
+    descriptionKey: "commands.help.sillytavern_presets.description",
     docsPath: DOCS_PATHS.SILLYTAVERN_PROMPT_PRESETS,
     sections: [
       {
-        titleKey: "commands.help.st-preset.embed1_controls_title",
-        bodyKey: "commands.help.st-preset.embed1_controls_description",
+        titleKey: "commands.help.sillytavern_presets.importing_title",
+        bodyKey: "commands.help.sillytavern_presets.importing_body",
       },
       {
-        titleKey: "commands.help.st-preset.embed1_still_sent_title",
-        bodyKey: "commands.help.st-preset.embed1_still_sent_description",
+        titleKey: "commands.help.sillytavern_presets.controls_title",
+        bodyKey: "commands.help.sillytavern_presets.controls_body",
+      },
+      {
+        titleKey: "commands.help.sillytavern_presets.still_applies_title",
+        bodyKey: "commands.help.sillytavern_presets.still_applies_body",
       },
     ],
-    footerKey: "commands.help.st-preset.embed1_footer",
+    footerKey: "commands.help.sillytavern_presets.footer",
     variables: (locale) => ({
-      stPresets: configPage(locale, "commands.help.breadcrumbs.plugins.sillytavern-presets"),
-      stPresetImport: configPage(locale, "commands.help.breadcrumbs.plugins.sillytavern-presets"),
-      stPresetToggle: configPage(locale, "commands.help.breadcrumbs.plugins.sillytavern-presets"),
-      stPresetRemove: configPage(locale, "commands.help.breadcrumbs.plugins.sillytavern-presets"),
-      configSystemPromptSet: configPage(locale, "commands.help.breadcrumbs.behavior.general"),
-      personaPromptSet: configPage(locale, "commands.help.breadcrumbs.persona.advanced"),
-      personaAttributeAdd: configPage(locale, "commands.help.breadcrumbs.persona.general"),
-      personaSampleDialogueAdd: configPage(locale, "commands.help.breadcrumbs.persona.general"),
-      configPlugins: configPage(locale, "commands.help.breadcrumbs.plugins.sillytavern-presets"),
+      configStPresets: configPage(locale, "commands.help.breadcrumbs.plugins.sillytavern-presets"),
+      configBehaviorGeneral: configPage(locale, "commands.help.breadcrumbs.behavior.general"),
+      configPersonaAdvanced: configPage(locale, "commands.help.breadcrumbs.persona.advanced"),
     }),
   },
-] as const;
+  {
+    id: "mcp-servers",
+    labelKey: "commands.help.dashboard.sections.mcp_servers",
+    pickerDescriptionKey: "commands.help.dashboard.sections.mcp_servers_description",
+    titleKey: "commands.help.mcp_servers.title",
+    descriptionKey: "commands.help.mcp_servers.description",
+    docsPath: DOCS_PATHS.MCP,
+    sections: [
+      {
+        titleKey: "commands.help.mcp_servers.hosted_title",
+        bodyKey: "commands.help.mcp_servers.hosted_body",
+      },
+      {
+        titleKey: "commands.help.mcp_servers.local_title",
+        bodyKey: "commands.help.mcp_servers.local_body",
+      },
+      {
+        titleKey: "commands.help.mcp_servers.before_title",
+        bodyKey: "commands.help.mcp_servers.before_body",
+      },
+    ],
+    footerKey: "commands.help.mcp_servers.footer",
+    variables: (locale) => ({
+      configMcp: configPage(locale, "commands.help.breadcrumbs.plugins.mcp-servers"),
+      configTools: configPage(locale, "commands.help.breadcrumbs.plugins.available-tools"),
+    }),
+  },
+  {
+    id: "matrix",
+    labelKey: "commands.help.dashboard.sections.matrix",
+    pickerDescriptionKey: "commands.help.dashboard.sections.matrix_description",
+    titleKey: "commands.help.matrix_bridge.title",
+    descriptionKey: "commands.help.matrix_bridge.description",
+    docsPath: DOCS_PATHS.MATRIX_BRIDGE,
+    sections: [
+      {
+        titleKey: "commands.help.matrix_bridge.linking_title",
+        bodyKey: "commands.help.matrix_bridge.linking_body",
+      },
+      {
+        titleKey: "commands.help.matrix_bridge.reads_title",
+        bodyKey: "commands.help.matrix_bridge.reads_body",
+      },
+    ],
+    footerKey: "commands.help.matrix_bridge.footer",
+    variables: (locale) => ({
+      matrixLink: mention("matrix", "link"),
+      matrixBotUser: process.env.MATRIX_BOT_USER_ID ?? localizer(locale, "commands.help.matrix.bot_user_fallback"),
+    }),
+  },
+];
 
 export const HELP_CATEGORIES: readonly HelpCategoryDefinition[] = [
   { id: "setup", labelKey: "commands.help.dashboard.categories.setup", pages: setupPages },
   { id: "features", labelKey: "commands.help.dashboard.categories.features", pages: featurePages },
-  { id: "memory", labelKey: "commands.help.dashboard.categories.memory", pages: memoryPages },
-  { id: "behavior", labelKey: "commands.help.dashboard.categories.behavior", pages: behaviorPages },
-  { id: "integrations", labelKey: "commands.help.dashboard.categories.integrations", pages: integrationPages },
+  { id: "moderation", labelKey: "commands.help.dashboard.categories.moderation", pages: moderationPages },
+  { id: "plugins", labelKey: "commands.help.dashboard.categories.plugins", pages: pluginPages },
 ] as const;
 
 export function getHelpCategory(categoryId: string): HelpCategoryDefinition | undefined {

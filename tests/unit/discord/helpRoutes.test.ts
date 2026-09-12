@@ -35,11 +35,11 @@ describe("help global interaction route", () => {
     await helpInteractionRoute.execute({} as Client, interaction, {
       namespace: "help",
       version: "v2",
-      segments: ["category", "ja", "memory"],
+      segments: ["category", "ja", "features"],
     });
 
-    expect(payload).toContain("永続メモリ");
-    expect(payload).toContain("help:v2:page:ja:memory");
+    expect(payload).toContain("機能");
+    expect(payload).toContain("help:v2:page:ja:features");
   });
 
   it("opens a provider modal as the select interaction's only acknowledgement", async () => {
@@ -112,7 +112,7 @@ describe("help global interaction route", () => {
     await helpInteractionRoute.execute({} as Client, interaction, {
       namespace: "help",
       version: "v2",
-      segments: ["navigate", "en-US", "features", "speech", "chatterbox"],
+      segments: ["navigate", "en-US", "features", "media-generation", "speech-generation"],
     });
 
     expect(capturedPayload).toBeDefined();
@@ -130,9 +130,9 @@ describe("help global interaction route", () => {
 
     expect(variantRow).toBeDefined();
     const selectMenu = variantRow?.components[0];
-    const chatterboxOption = selectMenu?.options.find((opt) => opt.value === "chatterbox");
-    expect(chatterboxOption).toBeDefined();
-    expect(chatterboxOption?.default).toBe(true);
+    const speechOption = selectMenu?.options.find((opt) => opt.value === "speech-generation");
+    expect(speechOption).toBeDefined();
+    expect(speechOption?.default).toBe(true);
   });
 
   it("throws when navigate targets a nonexistent subsection", async () => {
@@ -149,7 +149,7 @@ describe("help global interaction route", () => {
       helpInteractionRoute.execute({} as Client, interaction, {
         namespace: "help",
         version: "v2",
-        segments: ["navigate", "en-US", "features", "speech", "nonexistent-variant"],
+        segments: ["navigate", "en-US", "features", "media-generation", "nonexistent-variant"],
       }),
     ).rejects.toThrow("Invalid help navigation target");
   });

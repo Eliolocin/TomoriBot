@@ -5,6 +5,7 @@ import {
   type Client,
   type ComponentInContainerData,
   type ContainerComponentData,
+  type StringSelectMenuComponentData,
 } from "discord.js";
 import { HELP_CATEGORIES } from "@/utils/discord/helpCatalog";
 import { HELP_PROVIDER_IDS } from "@/utils/discord/helpProviderGuides";
@@ -34,8 +35,9 @@ function getContainer(
   locale: string,
   categoryId: string,
   pageId: string,
+  variantId?: string,
 ): ContainerComponentData<ComponentInContainerData> {
-  const payload = buildHelpDashboardPayload(locale, categoryId, pageId);
+  const payload = buildHelpDashboardPayload(locale, categoryId, pageId, variantId);
   expect(payload.flags).toBe(MessageFlags.IsComponentsV2);
   expect(payload.components).toHaveLength(2);
   return payload.components[0] as ContainerComponentData<ComponentInContainerData>;
@@ -59,85 +61,109 @@ describe("help dashboard", () => {
     }
   });
 
-  it("shows the onboarding header only on Setup Step 1 and keeps five category buttons", () => {
-    const container = getContainer("en-US", "setup", "setup-step-1");
-    const first = container.components[0];
-    const intro = container.components[2];
-    const step = container.components[3];
-    const features = JSON.stringify(getContainer("en-US", "features", "features"));
+  it("asserts exactly 4 categories, 14 sections, and 17 subsections across the catalog", () => {
+    expect(HELP_CATEGORIES.map((c) => c.id)).toEqual(["setup", "features", "moderation", "plugins"]);
 
-    expect(first.type).toBe(ComponentType.ActionRow);
-    expect("components" in first ? first.components : []).toHaveLength(5);
+    const totalPages = HELP_CATEGORIES.flatMap((c) => c.pages);
+    expect(totalPages).toHaveLength(14);
+
+    const totalSubsections = totalPages.flatMap((p) => p.variants ?? []);
+    expect(totalSubsections).toHaveLength(17);
+
+    const container = getContainer("en-US", "setup", "personal-profile");
+    const categoryRow = container.components[0];
+    expect(categoryRow.type).toBe(ComponentType.ActionRow);
+    expect("components" in categoryRow ? categoryRow.components : []).toHaveLength(4);
     expect(container.accentColor).toBe(0x65c6c5);
-    expect(getContainer("en-US", "features", "features").accentColor).toBe(0x65c6c5);
-    expect("content" in intro ? intro.content : "").toStartWith("## Getting Started with TomoriBot");
-    expect("content" in step ? step.content : "").toStartWith("### Step 1: Get an API Key");
-    expect(features).not.toContain("Getting Started with TomoriBot");
-    expect(JSON.stringify(getContainer("en-US", "setup", "setup-step-2"))).toContain(
-      "### Step 2: Run the Setup Command",
-    );
-    expect(JSON.stringify(getContainer("en-US", "setup", "setup-step-3"))).toContain("### Step 3: Start Chatting");
-    expect(JSON.stringify(getContainer("en-US", "setup", "setup-step-4"))).toContain(
-      "### Step 4: Customize TomoriBot (Optional)",
-    );
-    expect(JSON.stringify(container)).toContain("← Previous");
-    expect(JSON.stringify(container)).toContain("Next →");
+    expect(getContainer("en-US", "features", "multiple-personas").accentColor).toBe(0x65c6c5);
   });
 
-  it("renders documentation and support as link buttons below the container", () => {
-    const payload = buildHelpDashboardPayload("en-US", "setup", "setup-step-1");
-    const footer = payload.components.at(-1);
+  it("ensures every section and subsection select option has a non-empty description <= 100 characters in length", () => {
+    for (const locale of ["en-US", "ja"]) {
+      for (const category of HELP_CATEGORIES) {
+        for (const page of category.pages) {
+          const variants = page.variants ?? [undefined];
+          for (const variant of variants) {
+            const payload = buildHelpDashboardPayload(locale, category.id, page.id, variant?.id);
+            const container = payload.components[0] as ContainerComponentData<ComponentInContainerData>;
 
-    expect(footer?.type).toBe(ComponentType.ActionRow);
-    const buttons = footer && "components" in footer ? footer.components : [];
-    expect(buttons).toHaveLength(2);
-    expect(JSON.stringify(buttons)).toContain("Read the Web Version");
-    expect(JSON.stringify(buttons)).toContain("Get Technical Support");
-    expect(JSON.stringify(buttons)).toContain("discord.gg/bjCfHm9QsB");
+            for (const comp of container.components) {
+              if (comp.type === ComponentType.ActionRow && "components" in comp) {
+                for (const child of comp.components) {
+                  if (child.type === ComponentType.StringSelect) {
+                    const select = child as StringSelectMenuComponentData;
+                    for (const option of select.options) {
+                      expect(option.description).toBeDefined();
+                      expect(typeof option.description).toBe("string");
+                      expect(option.description?.length).toBeGreaterThan(0);
+                      expect(option.description?.length).toBeLessThanOrEqual(100);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   });
 
-  it("adds described provider choices only to Setup Step 1", () => {
-    const stepOne = JSON.stringify(getContainer("en-US", "setup", "setup-step-1"));
-    const stepTwo = JSON.stringify(getContainer("en-US", "setup", "setup-step-2"));
+  it("renders documentation and support as link buttons below the container and sets active subsection docs URL", () => {
+    const comfyPayload = buildHelpDashboardPayload("en-US", "setup", "custom-endpoints", "comfyui");
+    const comfyFooter = comfyPayload.components.at(-1);
+    expect(comfyFooter?.type).toBe(ComponentType.ActionRow);
+    const comfyButtons = comfyFooter && "components" in comfyFooter ? comfyFooter.components : [];
+    expect(comfyButtons).toHaveLength(2);
+    expect(JSON.stringify(comfyButtons)).toContain("Read the Web Version");
+    expect(JSON.stringify(comfyButtons)).toContain(
+      "https://docs.tomoribot.app/self-hosting/local-endpoints/setup-comfyui/",
+    );
+    expect(JSON.stringify(comfyButtons)).toContain("Get Technical Support");
+    expect(JSON.stringify(comfyButtons)).toContain("discord.gg/bjCfHm9QsB");
 
-    expect(stepOne).toContain("help:v2:provider");
-    expect(stepOne).toContain("Choose Provider");
-    expect(stepOne).toContain("General-purpose and has generous free usage");
-    expect(stepTwo).not.toContain('help:v2:provider"');
+    const personasPayload = buildHelpDashboardPayload("en-US", "features", "multiple-personas");
+    const personasFooter = personasPayload.components.at(-1);
+    const personasButtons = personasFooter && "components" in personasFooter ? personasFooter.components : [];
+    expect(JSON.stringify(personasButtons)).toContain(
+      "https://docs.tomoribot.app/features/chatting-personality/multiple-personas/",
+    );
   });
 
   it("renders contextual endpoint and engine guides without changing the top-level page map", () => {
-    const comfyUi = JSON.stringify(buildHelpDashboardPayload("en-US", "features", "custom-endpoints", "comfyui"));
-    const whisperX = JSON.stringify(buildHelpDashboardPayload("en-US", "features", "transcription", "whisperx"));
+    const comfyUi = JSON.stringify(buildHelpDashboardPayload("en-US", "setup", "custom-endpoints", "comfyui"));
+    const speech = JSON.stringify(
+      buildHelpDashboardPayload("en-US", "features", "media-generation", "speech-generation"),
+    );
 
-    expect(comfyUi).toContain("ComfyUI Setup");
+    expect(comfyUi).toContain("ComfyUI");
     expect(comfyUi).toContain("/self-hosting/local-endpoints/setup-comfyui/");
-    expect(whisperX).toContain("WhisperX Transcription");
-    expect(whisperX).toContain("help:v2:variant:en-US:features:transcription");
+    expect(speech).toContain("Speech Generation");
+    expect(speech).toContain("help:v2:variant:en-US:features:media-generation");
   });
 
   it("renders clickable config mentions on every absorbed-command help page", () => {
     const expectedMention = "</config:987654321012345678>";
-    const pages = [
-      ["setup", "setup-step-3"],
-      ["behavior", "customization"],
-      ["memory", "short-term-memory"],
-      ["memory", "memory-tagging"],
-      ["behavior", "deliberate-tool-mode"],
+    const pages: [string, string, string?][] = [
+      ["features", "multiple-personas"],
+      ["features", "tons-of-tweakability"],
+      ["features", "memory", "short-term-memory"],
+      ["plugins", "sillytavern-presets"],
+      ["plugins", "mcp-servers"],
     ];
 
-    for (const [categoryId, pageId] of pages) {
-      const serialized = JSON.stringify(buildHelpDashboardPayload("en-US", categoryId, pageId));
+    for (const [categoryId, pageId, variantId] of pages) {
+      const serialized = JSON.stringify(buildHelpDashboardPayload("en-US", categoryId, pageId, variantId));
       expect(serialized).toContain(expectedMention);
       expect(serialized).not.toContain("</config:0>");
       expect(serialized).not.toContain("`/config`");
     }
   });
 
-  it("falls back to Setup Step 1 for invalid external state", () => {
+  it("falls back to setup > personal-profile for invalid external state", () => {
     const selection = resolveHelpSelection("unknown", "also-unknown");
     expect(selection.category.id).toBe("setup");
-    expect(selection.page.id).toBe("setup-step-1");
+    expect(selection.page.id).toBe("personal-profile");
+    expect(selection.variant).toBeUndefined();
   });
 
   it("builds text-only provider modals with persistent route IDs", () => {
@@ -151,11 +177,11 @@ describe("help dashboard", () => {
   });
 
   it("renders the page header and subsection header when a variant is active", () => {
-    const pageTitle = localizer("en-US", "commands.help.speech.overview.title");
-    const variantTitle = localizer("en-US", "commands.help.speech.chatterbox.title");
+    const pageTitle = localizer("en-US", "commands.help.dashboard.sections.custom_endpoints");
+    const variantTitle = localizer("en-US", "commands.help.dashboard.subsections.comfyui");
     expect(pageTitle).not.toBe(variantTitle);
 
-    const payload = buildHelpDashboardPayload("en-US", "features", "speech", "chatterbox");
+    const payload = buildHelpDashboardPayload("en-US", "setup", "custom-endpoints", "comfyui");
     const container = payload.components[0] as ContainerComponentData<ComponentInContainerData>;
     const serialized = JSON.stringify(payload);
 
@@ -170,13 +196,14 @@ describe("help dashboard", () => {
   });
 
   it("renders all page sections and footer when a page has no variants", () => {
-    const container = getContainer("en-US", "features", "personal-providers");
+    const container = getContainer("en-US", "features", "multiple-personas");
     const serialized = JSON.stringify(container);
 
-    expect(serialized).toContain(localizer("en-US", "commands.help.personal-provider.setup_field"));
-    expect(serialized).toContain(localizer("en-US", "commands.help.personal-provider.behavior_field"));
-    expect(serialized).toContain(localizer("en-US", "commands.help.personal-provider.byok_field"));
-    expect(serialized).toContain(localizer("en-US", "commands.help.personal-provider.footer"));
+    expect(serialized).toContain(localizer("en-US", "commands.help.multiple_personas.mains_alters_title"));
+    expect(serialized).toContain(localizer("en-US", "commands.help.multiple_personas.bringing_in_title"));
+    expect(serialized).toContain(localizer("en-US", "commands.help.multiple_personas.where_to_find_title"));
+    expect(serialized).toContain(localizer("en-US", "commands.help.multiple_personas.talking_title"));
+    expect(serialized).toContain("Share one of your own with `/persona export`");
   });
 
   it("derives the flattened stop count for each category from the catalog", () => {
@@ -187,23 +214,23 @@ describe("help dashboard", () => {
     }
   });
 
-  it("steps across the page boundary from the last custom-endpoints variant to the first speech variant", () => {
-    const featuresCategory = HELP_CATEGORIES.find((candidate) => candidate.id === "features");
-    const customEndpointsPage = featuresCategory?.pages.find((candidate) => candidate.id === "custom-endpoints");
-    const speechPage = featuresCategory?.pages.find((candidate) => candidate.id === "speech");
+  it("steps across the page boundary from the last personal-profile variant to the first custom-endpoints variant", () => {
+    const setupCategory = HELP_CATEGORIES.find((candidate) => candidate.id === "setup");
+    const personalProfilePage = setupCategory?.pages.find((candidate) => candidate.id === "personal-profile");
+    const customEndpointsPage = setupCategory?.pages.find((candidate) => candidate.id === "custom-endpoints");
 
-    const lastCustomVariant = customEndpointsPage?.variants?.at(-1);
-    const firstSpeechVariant = speechPage?.variants?.[0];
+    const lastPersonalVariant = personalProfilePage?.variants?.at(-1);
+    const firstCustomVariant = customEndpointsPage?.variants?.[0];
 
-    if (!featuresCategory || !customEndpointsPage || !speechPage || !lastCustomVariant || !firstSpeechVariant) {
-      throw new Error("Missing expected features catalog entries");
+    if (!setupCategory || !personalProfilePage || !customEndpointsPage || !lastPersonalVariant || !firstCustomVariant) {
+      throw new Error("Missing expected setup catalog entries");
     }
 
     const payload = buildHelpDashboardPayload(
       "en-US",
-      featuresCategory.id,
-      customEndpointsPage.id,
-      lastCustomVariant.id,
+      setupCategory.id,
+      personalProfilePage.id,
+      lastPersonalVariant.id,
     );
     const container = payload.components[0] as ContainerComponentData<ComponentInContainerData>;
     const navRow = container.components.find(
@@ -218,7 +245,7 @@ describe("help dashboard", () => {
     const nextButton = buttons[1];
     expect(nextButton?.disabled).toBe(false);
 
-    const expectedCustomId = `help:v2:navigate:en-US:${featuresCategory.id}:${speechPage.id}:${firstSpeechVariant.id}`;
+    const expectedCustomId = `help:v2:navigate:en-US:${setupCategory.id}:${customEndpointsPage.id}:${firstCustomVariant.id}`;
     expect(nextButton && "customId" in nextButton ? nextButton.customId : "").toBe(expectedCustomId);
   });
 

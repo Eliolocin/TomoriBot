@@ -687,4 +687,39 @@ describe("setupPanel Components V2 layout and limits", () => {
     expect(texts.join("\n")).toContain(localizer("en-US", "commands.setup.next_steps_title"));
     expect(texts.join("\n")).toContain(localizer("en-US", "commands.setup.learn_more_title"));
   });
+
+  it("uses red container accent when setup is pending and green once ready or complete", () => {
+    const pendingPayload = buildSetupWizardPayload({
+      draft: createDraft(),
+      locale: "en-US",
+      isHosted: false,
+      nonce: TEST_NONCE,
+    });
+    const pendingContainer = pendingPayload.components[0] as ContainerComponentData<unknown>;
+    expect(pendingContainer.accentColor).toBe(0xed4245);
+
+    const readyInput = createCompleteDraftInput(false);
+    const readyPayload = buildSetupWizardPayload({
+      draft: readyInput.draft,
+      locale: "en-US",
+      isHosted: false,
+      nonce: TEST_NONCE,
+      settingsCatalogs: readyInput.settingsCatalogs,
+    });
+    const readyContainer = readyPayload.components[0] as ContainerComponentData<unknown>;
+    expect(readyContainer.accentColor).toBe(0x57f287);
+
+    const successPayload = buildSetupSuccessPayload({
+      locale: "en-US",
+      context: "guild",
+      providerAccess: { mode: "user-byok" },
+      modelName: null,
+      providerLabel: "",
+      personaName: "Lighthouse",
+      notes: [],
+      learnMore: "Learn more",
+    });
+    const successContainer = successPayload.components[0] as ContainerComponentData<unknown>;
+    expect(successContainer.accentColor).toBe(0x57f287);
+  });
 });

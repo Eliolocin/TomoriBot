@@ -29,6 +29,8 @@ import {
   type HelpProviderId,
 } from "@/utils/discord/helpProviderGuides";
 import { SUPPORT_SERVER_URL, buildDocsUrl } from "@/utils/discord/docsLinks";
+import { safeSelectOptionText } from "@/utils/discord/ui/modals";
+import { isHostedPolicyEnvironment } from "@/utils/misc/hostedPolicy";
 import { localizer } from "@/utils/text/localizer";
 
 const TOMORI_TURQUOISE = 0x65c6c5;
@@ -111,6 +113,7 @@ function buildPageSelectRow(
         maxValues: 1,
         options: category.pages.map((page) => ({
           label: localizer(locale, page.labelKey),
+          description: safeSelectOptionText(localizer(locale, page.pickerDescriptionKey)),
           value: page.id,
           default: page.id === activePageId,
         })),
@@ -197,6 +200,7 @@ function buildVariantSelectRow(
         maxValues: 1,
         options: page.variants.map((variant) => ({
           label: localizer(locale, variant.labelKey),
+          description: safeSelectOptionText(localizer(locale, variant.pickerDescriptionKey)),
           value: variant.id,
           default: variant.id === selectedVariantId,
         })),
@@ -305,6 +309,13 @@ export function buildHelpDashboardPayload(
   const variantSelect = buildVariantSelectRow(locale, category, page, activeVariant?.id);
   if (variantSelect) {
     content.push(variantSelect);
+  }
+
+  if (category.id === "setup" && isHostedPolicyEnvironment()) {
+    content.push({
+      type: ComponentType.TextDisplay,
+      content: `-# ${localizer(locale, "general.legal.setup_agreement")}`,
+    });
   }
 
   const stops = buildHelpStops(category);
