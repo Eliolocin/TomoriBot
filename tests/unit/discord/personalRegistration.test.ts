@@ -5,14 +5,15 @@ import { initializeLocalizer } from "@/utils/text/localizer";
 beforeAll(async () => initializeLocalizer());
 
 describe("/personal registration", () => {
-  it("leaves only the accepted personal panel destinations", async () => {
+  it("leaves only the accepted personal leaves", async () => {
     const { executionMap } = await loadCommandData();
     const personal = executionMap.get("personal");
 
     expect(personal).toBeDefined();
     if (!personal) return;
 
-    expect([...personal.keys()].sort()).toEqual(["config", "memories", "providers"]);
+    // `nuke` is the erasure route the Privacy Policy names, so it must stay registered.
+    expect([...personal.keys()].sort()).toEqual(["config", "memories", "nuke", "providers"]);
   }, 30000);
 
   // The legacy `/memory` root this Wave 5 slice partially dissolved (personal CRUD gone, transfer

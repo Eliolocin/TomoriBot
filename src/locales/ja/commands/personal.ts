@@ -1,6 +1,24 @@
 export default {
   personal: {
     description: `あなたの個人的な設定を管理します`,
+    nuke: {
+      description: `TomoriBotが保存しているあなたの情報を、すべてのサーバーから消去します。`,
+      confirmation_description: `個人データを完全に消去することを確認してください。取り消せません。`,
+      confirmation_choice_yes: `はい、消去します`,
+      confirmation_choice_no: `いいえ、中止します`,
+      cancelled_title: `消去を中止しました`,
+      cancelled_description: `何も変更されていません。データはそのままです。`,
+      no_data_title: `消去するものがありません`,
+      no_data_description: `TomoriBotにあなたの記録は保存されていません。`,
+      success_title: `個人データを消去しました`,
+      success_description: `すべてのサーバーで消去しました：個人メモリー、パーソナライズ設定と呼び名の設定、スポットライト、保存済みのプロバイダーキー、個人用エンドポイントと登録モデル、利用統計、およびあなたが作成した、またはあなた宛てのリマインダー**{reminders_deleted}**件。
+
+\`/reward\`と\`/punish\`で与えた人格の条件付けも削除されたため、該当サーバーの人格の振る舞いが全員にとって変わる場合があります。
+
+あなたが教えたサーバーメモリーとアップロードした資料はサーバーに属するため、作成者情報だけを外して保持されます。あなたに関する記述は\`/memories\`から削除してください。設定したオプトアウトはそのまま残ります。
+
+次のメッセージから、TomoriBotはあなたを新規ユーザーとして扱います。`,
+    },
     "image-tags": {
       description: `画像生成を補助するため、自分の外見・身体的特徴をカンマ区切り画像タグで設定します。`,
       modal_title: `自分の画像タグ`,

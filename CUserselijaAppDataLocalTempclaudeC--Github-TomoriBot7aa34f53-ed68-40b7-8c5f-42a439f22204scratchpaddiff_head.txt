@@ -1,0 +1,1050 @@
+warning: in the working copy of 'bunfig.toml', CRLF will be replaced by LF the next time Git touches it
+warning: in the working copy of 'scripts/checks/docs-mention-baseline.json', CRLF will be replaced by LF the next time Git touches it
+diff --git a/bunfig.toml b/bunfig.toml
+index ad937146..89772a85 100644
+--- a/bunfig.toml
++++ b/bunfig.toml
+@@ -7,3 +7,7 @@
+ # documents as a manual self-test. A path outside this root must be prefixed with
+ # `./` or Bun reads it as a name filter and matches nothing.
+ root = "tests"
++
++# Bun reads `.env` before tests, so a production-shaped local config would leak into every
++# suite. See tests/preload.ts.
++preload = ["./tests/preload.ts"]
+diff --git a/docs/en/legal/privacy-policy.md b/docs/en/legal/privacy-policy.md
+index fc7a89d9..017d8dfa 100644
+--- a/docs/en/legal/privacy-policy.md
++++ b/docs/en/legal/privacy-policy.md
+@@ -4,73 +4,138 @@ description: How the official hosted TomoriBot instance collects, stores, and de
+ aiGenerated: false
+ ---
+ 
+-Last updated: 2026-01-25
++Last updated: 2026-09-12
+ 
+-This Privacy Policy explains how the official hosted TomoriBot instance handles data. If you self-host TomoriBot from this repository, you control your own data; this document is a reference template and does not govern your self-hosted deployment. 
++This Privacy Policy explains how the official hosted TomoriBot instance handles data. If you self-host TomoriBot from this repository, you control your own data; this document is a reference template and does not govern your self-hosted deployment.
+ 
+ Terms like "Server," "Memories," "Persona/Preset," "Provider," "Trigger," and "API Key" are defined in our [Terms of Service](/legal/terms-of-service/). Please refer to that document for definitions.
+ 
+-## 1) What We Collect and How Long We Keep It
+-
+-### 1.1) Data Stored Persistently
+-The following data is stored in our database until you delete it using TomoriBot's slash commands:
+-- **Discord identifiers and preferences:** User IDs, server IDs, nicknames, language/locale preferences, and privacy opt-out status to route commands and localize responses.
+-- **Server configuration and persona data:** TomoriBot nicknames, persona attributes, sample dialogues, trigger words, LLM/provider selections, timezone offsets, and feature toggles configured per server.
+-- **Server emoji and sticker metadata:** Discord IDs, names, descriptions, and format flags for custom emojis/stickers configured for emotional expressions. The actual image files are NOT stored; only metadata is retained to identify and use them.
+-- **Memories and content you provide through commands:** Personal memories, server memories, and text you submit via commands. These may reference Discord users and message content you supply.
+-- **Reminders:** Reminder text, target user/channel, scheduled time, recurrence settings, and timezone information stored when you create reminders via bot commands.
+-- **API keys:** Provider keys (e.g., AI or search) you choose to store. Keys are encrypted at rest.
+-- **Persona avatar images:** Images you upload for persona avatars are stored in cloud storage to enable the bot to use them when rendering personas across conversations.
+-- **Operational logs:** Error logs containing interaction IDs, user/server IDs, command names, error types, and stack traces for debugging. No message content or personal conversations are logged. Routine successful operations are not logged.
+-
+-### 1.2) Data Processed Ephemerally (Not Stored)
+-The following data is accessed temporarily during Trigger processing (as defined in the Terms of Service) and is NOT stored in our database:
+-- **Discord messages:** Latest content (typically last 80 messages) in the triggered Discord text channel are read in-memory to build conversation context and sent to your configured Provider for AI responses. This data is immediately discarded after the response is generated.
+-- **Attachments and media:** Message video/image attachments or profile picture analysis (e.g., `/peek profile_picture`) are processed in-memory and sent to your configured AI provider if needed, but are NOT stored by TomoriBot. Once processing completes, these files are discarded. Note: Persona avatar images are stored persistently (see Section 1.1).
+-- **Server asset URLs:** When emojis/stickers are used in AI responses, their image URLs are fetched fresh from Discord each time and may be sent to AI providers as conversation context. These URLs are not stored.
+-- **Server and channel metadata:** Server names, descriptions, channel names, and channel descriptions are fetched in real-time during conversations to provide contextual understanding. This metadata is processed in-memory and is NOT stored in our database.
+-- **User presence information:** Current user activities (e.g., what you're listening to, playing, or custom status) may be accessed during conversations to provide contextual awareness. This presence data is processed in-memory and is NOT stored.
+-
+-## 2) How We Use Data
+-- Operate and improve bot functionality, including localization, persona rendering, safety checks, and permission gating.
+-- Store and recall memories/persona data to keep conversations contextual.
+-- Send your prompts, relevant context, and optional attachments to the AI/search Providers you select so they can generate responses.
+-- Provide reminders, exports, imports, and server management tools.
+-- Detect and mitigate abuse, errors, and service stability issues.
+-
+-## 3) Third-Party Disclosure
+-- **AI and model providers:** Content you send (including prompts, persona data, sample dialogues, relevant context, and optional media) may be transmitted to providers you configure, such as Google, OpenRouter, or NovelAI. Their terms, privacy policies, safety filters, and retention rules apply.
+-- **Search providers:** If enabled, search queries and relevant context may be sent to the configured provider (e.g., Brave Search). Their policies apply.
+-- We do not sell personal data. Sharing occurs only as necessary to operate the features you invoke or to comply with law.
+-
+-## 4) Your Choices and Controls
+-- Use `/personal config` to stop saving personal memories about you across servers.
+-- Use `/data export` to retrieve personal or server data.
+-- Use `/data delete personal` to remove your user record (cascades related personal data) or `/data delete server` to remove a server's TomoriBot data.
+-- Server admins can disable features such as sample dialogue teaching, personal memories, web search, or other permissions using configuration commands.
+-
+-## 5) Retention
+-- Stored data (memories, persona, reminders, server configuration, and encrypted keys) persists until removed through the commands above.
+-- When TomoriBot is removed from a server, server data may be retained to allow for re-invitation.
+-- User data persists across servers until explicitly deleted via `/data delete personal`.
+-- Error logs are kept for operational stability and diagnosing system issues.
+-- Transient context built from recent Discord messages is kept in memory only for the duration of request processing unless you explicitly save it.
+-
+-## 6) Security
+-- Provider API keys are encrypted at rest.
+-- The database is restricted to the bot's runtime and operators with server access. No method is perfectly secure; do not submit highly sensitive or regulated data.
+-
+-## 7) Children's Data
+-- TomoriBot is intended for users 13+ (or the local minimum age for Discord). We do not knowingly collect data from younger users.
+-
+-## 8) Changes
+-- We may update this Privacy Policy; the "Last updated" date will change accordingly. Continued use after updates means you accept the revisions.
++## Privacy at a Glance
++
++- We do not keep a copy of your Discord chat history. TomoriBot reads recent messages while it is answering, then discards them.
++- If short-term memory is enabled, TomoriBot does store short summaries derived from those conversations. Those expire after a period of inactivity (90 days by default).
++- Everything you teach TomoriBot on purpose (memories, persona settings, uploaded documents) is stored until someone deletes it.
++- When TomoriBot answers, it sends your prompt and recent context to the AI provider configured for that server. That provider has its own terms and privacy practices, which we do not control.
++- `/personal nuke` erases everything we store about you, in every server.
++
++The sections below give the detail behind each of those lines.
++
++## 1) Who This Policy Covers
++
++This policy applies to the official hosted TomoriBot instance. Server managers configure TomoriBot for a Server, but every member whose messages TomoriBot processes is covered by this policy, whether or not they ran a command themselves.
++
++Server managers accept the Terms of Service during `/setup` and confirm there that they will make this information available to their members. Any member can read the current policies at any time with `/legal privacy-policy` and `/legal terms-of-service`.
++
++## 2) What We Store
++
++### 2.1) About You
++- **Identity and preferences:** your Discord user ID, language preference, and privacy opt-out status.
++- **Personalization settings:** the nickname you choose, pronouns, gender identity, forms of address, physical appearance tags, an impersonation prompt, a character reference image URL, timezone offset, and message prefix/suffix overrides.
++- **Naming preferences:** what each persona should call you.
++- **Personal memories:** facts you teach TomoriBot about yourself, or that it saves about you when personal memories are enabled.
++- **Spotlights:** the personal spotlight configuration you set per server.
++- **Conditioning records:** the text and reason you supply through `/reward` and `/punish`, which shape how a persona behaves in that Server.
++- **Usage counters:** daily counts of commands, models, and tools you used, plus token totals, keyed to you, the Server, and the persona. These power `/stats`.
++
++### 2.2) About Your Server
++- **Server configuration:** persona attributes, sample dialogues, trigger words, provider and model selections, channel and role permissions, quotas, timezone, and feature toggles.
++- **Server memories:** facts taught to TomoriBot for the whole Server. These may describe members, including members who did not write them.
++- **Emoji and sticker metadata:** Discord IDs, names, descriptions, and format flags. Image files themselves are not stored.
++- **Reminders:** the reminder text, the target user's Discord ID and nickname, the channel, the schedule, and any recurrence setting.
++- **Short-term memory summaries:** when short-term memory is enabled, TomoriBot writes short summaries derived from recent conversation into the database so it can stay contextual between Triggers. These are deleted after a period of inactivity (90 days by default).
++- **Integration links:** Matrix room and channel links, and the URLs, discovered tool names, and encrypted authentication tokens for any MCP servers a manager connects.
++
++### 2.3) Credentials
++- **Provider API keys** you choose to store, at Server level or personally.
++- **Custom endpoint definitions,** including the endpoint URL and any bearer token.
++
++All credentials are encrypted at rest.
++
++### 2.4) Content You Upload
++- **Documents:** the full extracted text of files uploaded to a Server's knowledge base, along with the file name, media type, size, and search embeddings generated from that text.
++- **Persona images:** avatars, sprites, and character reference images, stored in object storage so personas can render consistently.
++- **Voice samples:** audio samples and their reference transcripts, when voice cloning is configured.
++
++### 2.5) Operational Records
++- **Error logs:** interaction IDs, user and Server IDs, command names, error types, and stack traces. Message content and conversations are not logged. Kept for 90 days.
++- **Performance metrics:** timing and resource samples used to keep the service healthy. Kept for 30 days.
++- **Persona message mappings:** Discord message and channel IDs linking a sent message to the persona sprite it used, so TomoriBot can update or clean up its own messages. Kept for 30 days.
++
++## 3) What We Do Not Store
++
++The following is read while TomoriBot is preparing a response and is not written to our database:
++
++- **Discord messages:** recent channel messages (typically the last 80) are read in memory to build context and sent to the configured Provider. They are discarded once the response is generated. Summaries may be retained separately if short-term memory is enabled, as described in Section 2.2.
++- **Attachments and media:** images, video, and profile pictures analyzed during a Trigger are processed in memory and discarded.
++- **Server and channel metadata:** Server names, descriptions, channel names, and topics are read fresh each time.
++- **Presence information:** your current activity or status, when available.
++- **Emoji and sticker images:** fetched from Discord each time they are used.
++
++## 4) What We Send to Third Parties
++
++- **AI providers:** your prompt, the recent context described above, persona data, and any attachments are sent to the Provider configured for that Server or for you, such as Google, OpenRouter, NovelAI, or a custom endpoint. This covers text, vision, embedding, image, video, speech, and transcription requests. Their terms, privacy policies, safety filters, and retention rules apply to that content, and we do not control them.
++- **Search providers:** if web search is enabled, search queries and relevant context go to the configured search provider.
++- **Matrix:** if a Matrix bridge is configured for a channel, messages cross between Discord and the linked Matrix room.
++
++We do not sell personal data. We share it only as needed to operate the features you invoke, or where the law requires it.
++
++## 5) How Long We Keep It
++
++| Data | Retention |
++|---|---|
++| Short-term memory summaries | 90 days after last activity (default) |
++| Error logs | 90 days |
++| Performance metrics | 30 days |
++| Persona message mappings | 30 days |
++| Everything else in Section 2 | Until deleted through the commands in Section 6 |
++
++When TomoriBot is removed from a Server, that Server's data is kept so the configuration survives a re-invitation. A manager who wants it gone should run `/nuke` before removing the bot.
++
++## 6) Your Controls
++
++| What you want | Command |
++|---|---|
++| Stop TomoriBot saving personal memories about you | `/personal config` |
++| Review or remove individual personal memories | `/personal memories` |
++| Review or remove Server memories and documents | `/memories` |
++| Take a copy of your personal data | `/export personal config`, `/export personal memories` |
++| Take a copy of a Server's data | `/export config`, `/export memories` |
++| Reset your personal settings to defaults | `/reset personal config` |
++| Erase everything we store about you, in every Server | `/personal nuke` |
++| Erase a Server's data (managers only) | `/nuke` |
++
++`/personal nuke` deletes your personal memories, personalization and naming settings, spotlights, your saved provider keys and personal endpoints, your registered models, your usage counters, the persona conditioning you contributed, and the reminders you created. Two consequences are worth knowing before you run it:
++
++- Persona conditioning you contributed through `/reward` and `/punish` shapes how a persona behaves for everyone in that Server, so removing it changes shared behavior.
++- Server memories you taught and documents you uploaded belong to the Server and are kept, with your authorship removed. If one of them describes you, ask a manager to remove it with `/memories`. Reminders others created that target you are also kept.
++
++Your opt-out settings deliberately survive erasure, so erasing your data does not quietly re-enable collection about you.
++
++For anything these commands cannot reach, contact us using Section 9 and we will handle it manually.
++
++## 7) Security
++
++- Provider API keys, bearer tokens, and MCP credentials are encrypted at rest.
++- Database connections use TLS with certificate verification.
++- Database access is limited to the bot's runtime and to operators with infrastructure access.
++
++No system is completely secure. Please do not give TomoriBot highly sensitive or regulated information.
++
++## 8) Children's Data
++
++TomoriBot is not directed to anyone below the minimum age Discord requires in their country, which is at least 13. We do not knowingly collect data from users below that age. If you believe we hold data about someone under the applicable minimum age, contact us using Section 9 and we will delete it.
+ 
+ ## 9) Contact
+-- For hosted-instance privacy questions or requests beyond the commands above, contact us through the email `bredrumb@gmail.com`, project GitHub issues, or the [official TomoriBot support Discord server](https://discord.gg/bjCfHm9QsB).
+ 
+-## 10) International Users and GDPR
+-- TomoriBot's hosted service operates globally with data stored according to the hosting provider's infrastructure.
+-- For users in the European Economic Area (EEA), UK, or Switzerland: You have additional rights under the General Data Protection Regulation (GDPR), including the right to access, rectify, erase, restrict processing, data portability, and to object to processing of your personal data.
+-- The data controls described in Section 4 fulfill most GDPR rights (export, deletion, opt-out). For additional requests, contact us via the methods in Section 9.
+-- Legal basis for processing: Legitimate interest (bot functionality), Contract (service provision), and Consent (optional features like memories and reminders).
++For privacy questions or requests beyond the commands above, email `bredrumb@gmail.com` or reach us in the [official TomoriBot support Discord server](https://discord.gg/bjCfHm9QsB). Please use email or a direct message rather than a public GitHub issue for anything involving your personal data.
++
++## 10) Changes
++
++We may update this Privacy Policy, and the "Last updated" date above will change when we do. Material changes are announced through the support Discord or the project repository.
++
++## 11) International Users and GDPR
++
++- TomoriBot's hosted service is available globally, and data is stored on infrastructure operated by our hosting provider.
++- If you are in the European Economic Area, the UK, or Switzerland, you have rights under the GDPR to access, rectify, erase, restrict, and port your personal data, and to object to processing.
++- The controls in Section 6 cover access, portability, and erasure directly. For anything else, contact us using Section 9.
++- We rely on the following legal bases: performance of a contract for operating the features you invoke; legitimate interest for security, abuse prevention, and service stability; and consent for optional features you switch on, such as personal memories, short-term memory, and web search. You can withdraw that consent by turning the feature off.
+diff --git a/docs/en/legal/terms-of-service.md b/docs/en/legal/terms-of-service.md
+index ddcffb55..dd48036c 100644
+--- a/docs/en/legal/terms-of-service.md
++++ b/docs/en/legal/terms-of-service.md
+@@ -4,37 +4,51 @@ description: The terms governing use of the official hosted TomoriBot instance.
+ aiGenerated: false
+ ---
+ 
+-Last updated: 2026-01-15
++Last updated: 2026-09-12
+ 
+-By setting up or interacting with TomoriBot, you accept these Terms and Discord's Terms of Service and Community Guidelines. These Terms apply to the official hosted TomoriBot instance on Discord. If you run your own copy from TomoriBot's open-source repository, you are not bound by these Terms; your use is governed by the AGPLv3 license in `LICENSE` instead, and you alone control data handling in your self-hosted environment. 
++By setting up or interacting with TomoriBot, you accept these Terms and Discord's Terms of Service and Community Guidelines. These Terms apply to the official hosted TomoriBot instance on Discord. If you run your own copy from TomoriBot's open-source repository, you are not bound by these Terms; your use is governed by the AGPLv3 license in `LICENSE` instead, and you alone control data handling in your self-hosted environment.
+ 
+ ## 1) Definition of Terms
+ For clarity, these terms are used throughout this document:
+ - **Server**: A Discord guild/community where TomoriBot is set up
+-- **Memories**: Facts or information taught to TomoriBot via `/teach` commands, or self-taught through the `remember_this_fact` function tool
++- **Memories**: Facts or information taught to TomoriBot via commands, or self-taught through the `remember_this_fact` function tool
+ - **Persona/Preset**: Configurable personality and behavioral profiles that change how TomoriBot responds
+ - **Provider**: Third-party AI or search services (e.g., Google, NovelAI, OpenRouter, Brave Search) that you configure TomoriBot to use
+ - **Hosted Instance**: The official TomoriBot service maintained as a public bot for Discord, as opposed to self-hosted copies
+ - **API Key**: Authentication credentials you provide to connect TomoriBot to your chosen Providers
+ - **Trigger**: An event that causes TomoriBot to generate a response in a Discord text channel using your configured provider, such as: mentioning the bot, replying to its messages, using slash commands that require AI/search processing, or sending messages in channels where auto-reply is enabled. Triggers consume API credits/tokens from your provider account.
++- **Server Manager**: A member with permission to configure TomoriBot for a Server, such as the member who runs `/setup`
+ 
+ ## 2) Scope of Service
+ - TomoriBot is an AI-powered chatbot that responds to Discord interactions using external Providers that you configure.
+ - We may change, suspend, or end features of TomoriBot at any time for maintenance, safety, or legal reasons.
+ 
+-## 3) Your Responsibilities
++## 3) Who Accepts What
++- A Server Manager accepts these Terms for the Server when completing `/setup`, and confirms there that they have read the Privacy Policy and will make that information available to the Server's members.
++- A Server Manager cannot accept these Terms on another member's behalf, and does not warrant any other member's age or conduct. Each member accepts these Terms for themselves by interacting with TomoriBot.
++- Members can read the current documents at any time with `/legal terms-of-service` and `/legal privacy-policy`.
++- Server Managers are responsible for telling their members that TomoriBot is installed and how it processes messages, and for using the available channel and role controls to limit where TomoriBot reads messages.
++
++## 4) Your Responsibilities
+ - Do not use TomoriBot for unlawful, harmful, or platform-disallowed content, harassment, or unauthorized access attempts.
+-- You must be at least 13 years old (or the minimum age required by Discord in your jurisdiction) to use TomoriBot. By using the service, you represent that you meet this age requirement.
+-- You remain responsible for content you or your server members provide (messages, memories, persona data, uploads). Ensure you have rights to share it and avoid sensitive data you do not want processed by your configured Providers.
++- You must meet the minimum age Discord requires in your country, which is at least 13, to use TomoriBot. By using the service, you represent that you meet this age requirement.
++- You remain responsible for content you provide (messages, memories, persona data, uploads). Ensure you have rights to share it, and avoid sensitive data you do not want processed by your configured Providers.
+ - Respect rate limits and avoid spam or abuse that degrades the service.
+ 
+-## 4) Third-Party Providers & Models
++## 5) Age-Restricted Content
++- Features that produce adult content are off by default and must be deliberately enabled by a Server Manager.
++- A Server Manager who enables them confirms that they are 18 or older and that the content will be confined to channels Discord marks as age-restricted, which are accessible only to adults.
++- Content that is prohibited by Discord's Community Guidelines or by law remains prohibited regardless of any setting, channel marking, or age confirmation.
++- We may disable these features for a Server, or remove access entirely, where they appear to be reaching minors or producing prohibited content.
++
++## 6) Third-Party Providers and Models
+ - You may connect TomoriBot to external Providers (e.g., Anthropic, Google Gemini, OpenAI/OpenRouter, NovelAI, Brave Search). Their terms, privacy policies, safety filters, and billing apply to any content you send through them.
++- Accepting these Terms covers TomoriBot only. It is not acceptance of any Provider's terms, and it does not relieve you of them. Review your chosen Provider's terms before configuring it with TomoriBot.
+ - TomoriBot is not affiliated with, endorsed by, or sponsored by Discord or any of these Providers. We are an independent service that integrates with their APIs.
+-- We cannot control the behavior, retention, or safety policies of those Providers. Review your chosen Provider's terms before configuring them with TomoriBot.
++- We cannot control the behavior, retention, or safety policies of those Providers.
+ - AI-generated content may be inaccurate, biased, or inappropriate despite safety filters. TomoriBot does not verify or endorse AI outputs.
+ 
+-## 5) API Keys and Billing
++## 7) API Keys and Billing
+ - If you supply API keys for AI/search providers, you authorize TomoriBot to store and use them to fulfill your requests. All provided keys are encrypted at rest.
+ - You must only provide API keys that you are legally authorized to use. This means keys obtained directly from the provider under your own account, or keys explicitly authorized for your use by the account holder. The following are strictly prohibited:
+   - Stolen, leaked, or compromised API keys
+@@ -43,29 +57,34 @@ For clarity, these terms are used throughout this document:
+ - You assume all legal responsibility for the legitimacy of API keys you provide.
+ - We will only use your API keys to process your explicit interactions with TomoriBot. We do not pool API keys, use your keys to process other users' requests, or use them for testing, development, analytics, or any purpose other than fulfilling you and your server members' direct requests to TomoriBot.
+ - You are responsible for all provider-side costs and account usage caused by each TomoriBot Trigger associated with your API key. Monitor your API key dashboards for usage and billing. The `/tool estimate cost` command provides a rough estimate of per-trigger costs.
+-- We recommend using API keys with minimal required permissions and considering using provider-specific rate limits and spending caps where available.
++- We recommend using API keys with minimal required permissions, and provider-side rate limits and spending caps where available.
+ 
+-## 6) Data Handling
+-- Data collected and usage purposes are described in the Privacy Policy, which you also accept by setting up or interacting with TomoriBot.
+-- You can export or delete your data using in-bot commands where available; some records may persist where required by law or for security.
++## 8) Data Handling
++- Data collected, retention periods, and usage purposes are described in the [Privacy Policy](/legal/privacy-policy/).
++- You can export or erase your data with the commands listed in that document. `/personal nuke` erases your personal data across every Server; `/nuke` erases a Server's data and is limited to Server Managers.
++- Content owned by a Server, such as Server memories and uploaded documents, survives a personal erasure with your authorship removed. Ask a Server Manager to remove specific entries with `/memories`.
++- Some operational records may persist for their stated retention period, or longer where required by law or for security.
+ 
+-## 7) Availability, Support, and Changes
++## 9) Availability, Support, and Changes
+ - Service availability is not guaranteed. Outages, maintenance, or rate limits may interrupt responses.
+-- We may update these Terms at any time. Material changes will be announced with at least 30 days' notice through the support Discord or project GitHub, and will be reflected by updating the "Last updated" date. Continuing to use the bot after changes means you accept the revised Terms.
++- We may update these Terms at any time. Material changes will be announced with at least 30 days' notice through the support Discord or project repository, and will be reflected by updating the "Last updated" date. Continuing to use the bot after changes means you accept the revised Terms.
+ 
+-## 8) Termination
+-- We may suspend or remove access for violations of these Terms, legal requirements, or safety/security concerns. You may remove TomoriBot at any time; consider using the `/data delete` command to remove stored data before removal.
++## 10) Termination
++- We may suspend or remove access for violations of these Terms, legal requirements, or safety/security concerns.
++- You may remove TomoriBot at any time. Consider running `/nuke` before removal, since a Server's data is otherwise kept so the configuration survives a re-invitation.
+ 
+-## 9) Disclaimers and Liability
++## 11) Disclaimers and Liability
+ - The service is provided "AS IS" and "AS AVAILABLE" without warranties of any kind. We disclaim implied warranties of merchantability, fitness for a particular purpose, non-infringement, and uninterrupted availability.
+-- We implement industry-standard security practices including encryption at rest, SSL/TLS for database connections with certificate verification, and secure credential handling. However, we cannot guarantee absolute security against all potential threats, breaches, or unauthorized access.
+-- To the maximum extent permitted by law, we are not liable for:       
++- We encrypt credentials at rest, use TLS with certificate verification for database connections, and restrict database access to the bot's runtime and operators with infrastructure access. No system is completely secure, and we cannot guarantee protection against all threats, breaches, or unauthorized access.
++- To the maximum extent permitted by law, we are not liable for:
+   - Indirect, incidental, consequential, or punitive damages
+   - Actions of third-party providers or users
+   - Unauthorized access to, theft of, corruption of, or loss of any data stored by TomoriBot (including API keys, memories, personas, and configurations)
+   - Any damages except in cases of gross negligence or intentional misconduct on our part
+-  - Our total liability is limited to the greater of (a) amounts you paid us for the service (typically $0 USD; voluntary donations are not payment for service) or (b) $10 USD in aggregate for all claims.
+-  - By using the hosted TomoriBot service, you accept these risks. If you are uncomfortable with these risks, consider self-hosting TomoriBot from the open-source repository, where you maintain full control over data storage, encryption, and security practices.
++- Our total liability is limited to the greater of (a) amounts you paid us for the service (typically $0 USD; voluntary donations are not payment for service) or (b) $10 USD in aggregate for all claims.
++- By using the hosted TomoriBot service, you accept these risks. If you are uncomfortable with them, consider self-hosting TomoriBot from the open-source repository, where you maintain full control over data storage, encryption, and security practices.
++- Nothing in these Terms limits rights that cannot be limited under the law that applies to you.
+ 
+-## 10) Contact
+-- For hosted instance questions or concerns, reach out via the email `bredrumb@gmail.com`, the project GitHub issues, or the [official TomoriBot support Discord server](https://discord.gg/bjCfHm9QsB).
++## 12) Reports and Contact
++- For questions, abuse reports, security reports, or a report that TomoriBot holds data about someone below the applicable minimum age, email `bredrumb@gmail.com` or reach us in the [official TomoriBot support Discord server](https://discord.gg/bjCfHm9QsB).
++- Please use email or a direct message rather than a public GitHub issue for anything involving personal data or a security vulnerability.
+diff --git a/docs/ja/legal/privacy-policy.md b/docs/ja/legal/privacy-policy.md
+index 40d283c7..ecd0287e 100644
+--- a/docs/ja/legal/privacy-policy.md
++++ b/docs/ja/legal/privacy-policy.md
+@@ -4,73 +4,138 @@ description: TomoriBot公式ホスト版インスタンスがデータをどの
+ aiGenerated: false
+ ---
+ 
+-最終更新日: 2026-01-25
++最終更新日: 2026-09-12
+ 
+ 本プライバシーポリシーは、公式ホスティング版TomoriBotインスタンスがデータをどのように取り扱うかを説明するものです。このリポジトリからTomoriBotを自己ホスティングする場合、データの管理は自身で行います。本文書は参考テンプレートであり、自己ホスティング環境には適用されません。
+ 
+-「サーバー」「メモリー」「ペルソナ/プリセット」「プロバイダー」「トリガー」「APIキー」などの用語は、[利用規約](/ja/legal/terms-of-service/)で定義されています。定義については当該文書を参照してください。
+-
+-## 1) 収集するデータと保持期間
+-
+-### 1.1) 永続的に保存されるデータ
+-以下のデータは、TomoriBotのスラッシュコマンドを使用して削除するまで、データベースに保存されます:
+-- **Discordの識別子と設定:** ユーザーID、サーバーID、ニックネーム、言語/ロケール設定、プライバシーオプトアウト状態。コマンドのルーティングとレスポンスのローカライゼーションに使用されます。
+-- **サーバー設定とペルソナデータ:** TomoriBotのニックネーム、ペルソナ属性、サンプル対話、トリガーワード、LLM/プロバイダー選択、タイムゾーンオフセット、サーバーごとに設定される機能トグル。
+-- **サーバーの絵文字とステッカーのメタデータ:** Discord ID、名前、説明、感情キー(例:「happy」「smug」)、カスタム絵文字/ステッカーの感情表現用フォーマットフラグ。実際の画像ファイルは保存されません。識別と使用のためのメタデータのみが保持されます。
+-- **メモリーとコマンドで提供されたコンテンツ:** 個人メモリー、サーバーメモリー、コマンドを通じて送信されたテキスト。これらにはDiscordユーザーおよび提供されたメッセージコンテンツへの参照が含まれる場合があります。
+-- **リマインダー:** リマインダーテキスト、対象ユーザー/チャンネル、予定時刻、繰り返し設定、タイムゾーン情報。ボットコマンドを通じてリマインダーを作成した際に保存されます。
+-- **APIキー:** 保存を選択したプロバイダーキー(例:AIまたは検索)。キーは保管時に暗号化されます。
+-- **ペルソナアバター画像:** ペルソナアバター用にアップロードした画像は、会話全体でペルソナをレンダリングする際にボットが使用できるよう、クラウドストレージに保存されます。
+-- **運用ログ:** インタラクションID、ユーザー/サーバーID、コマンド名、エラータイプ、デバッグ用のスタックトレースを含むエラーログ。メッセージコンテンツや個人的な会話は記録されません。通常の成功した操作は記録されません。
+-
+-### 1.2) 一時的に処理されるデータ(保存されない)
+-以下のデータは、トリガー処理中(利用規約で定義)に一時的にアクセスされ、データベースには保存されません:
+-- **Discordメッセージ:** トリガーされたDiscordテキストチャンネルの最新コンテンツ(通常は最新80メッセージ)が、会話コンテキストを構築するためにメモリ内で読み取られ、AIレスポンス生成のために設定されたプロバイダーに送信されます。このデータはレスポンス生成後すぐに破棄されます。
+-- **添付ファイルとメディア:** メッセージの動画/画像添付ファイル、プロフィール画像分析(例:`/peek profile_picture`)は、メモリ内で処理され、必要に応じて設定されたAIプロバイダーに送信されますが、TomoriBotには保存されません。処理が完了すると、これらのファイルは破棄されます。注:ペルソナアバター画像は永続的に保存されます(セクション1.1を参照)。
+-- **サーバーアセットURL:** 絵文字/ステッカーがAIレスポンスで使用される際、その画像URLは毎回Discordから新たに取得され、会話コンテキストとしてAIプロバイダーに送信される場合があります。これらのURLは保存されません。
+-- **サーバーとチャンネルのメタデータ:** サーバー名、説明、チャンネル名、チャンネル説明は、会話中にコンテキストを理解するためにリアルタイムで取得されます。このメタデータはメモリ内で処理され、データベースには保存されません。
+-- **ユーザープレゼンス情報:** 現在のユーザーアクティビティ(例:聴いている音楽、プレイ中のゲーム、カスタムステータス)は、会話中にコンテキストを把握するためにアクセスされる場合があります。このプレゼンスデータはメモリ内で処理され、保存されません。
+-
+-## 2) データの使用方法
+-- ローカライゼーション、ペルソナレンダリング、安全性チェック、権限ゲーティングを含むボット機能の運用と改善。
+-- メモリー/ペルソナデータを保存・呼び出して、会話をコンテキスト化。
+-- プロンプト、関連するコンテキスト、オプションの添付ファイルを、選択したAI/検索プロバイダーに送信し、レスポンスを生成。
+-- リマインダー、エクスポート、インポート、サーバー管理ツールの提供。
+-- 不正使用、エラー、サービス安定性の問題の検出と軽減。
+-
+-## 3) 第三者への開示
+-- **AIおよびモデルプロバイダー:** 送信したコンテンツ(プロンプト、ペルソナデータ、サンプル対話、関連するコンテキスト、オプションのメディアを含む)は、設定したプロバイダー(Google、OpenRouter、NovelAIなど)に送信される場合があります。それらの利用規約、プライバシーポリシー、安全フィルター、保持ルールが適用されます。
+-- **検索プロバイダー:** 有効化されている場合、検索クエリと関連するコンテキストは、設定されたプロバイダー(例:Brave Search)に送信される場合があります。それらのポリシーが適用されます。
+-- 個人データを販売することはありません。共有は、呼び出した機能を運用するため、または法令遵守のために必要な場合にのみ行われます。
+-
+-## 4) 選択肢とコントロール
+-- `/personal config`を使用して、サーバー間での個人メモリーの保存を停止できます。
+-- `/data export`を使用して、個人またはサーバーデータを取得できます。
+-- `/data delete personal`を使用してユーザーレコード(関連する個人データを含む)を削除するか、`/data delete server`を使用してサーバーのTomoriBotデータを削除できます。
+-- サーバー管理者は、設定コマンドを使用して、サンプル対話の教示、個人メモリー、ウェブ検索、その他の権限などの機能を無効化できます。
+-
+-## 5) 保持
+-- 保存されたデータ(メモリー、ペルソナ、リマインダー、サーバー設定、暗号化されたキー)は、上記のコマンドを通じて削除されるまで保持されます。
+-- TomoriBotがサーバーから削除された場合、再招待を可能にするためにサーバーデータが保持される場合があります。
+-- ユーザーデータは、`/data delete personal`を通じて明示的に削除されるまで、サーバー間で保持されます。
+-- エラーログは、運用の安定性とシステム問題の診断のために保持されます。
+-- 最近のDiscordメッセージから構築される一時的なコンテキストは、明示的に保存しない限り、リクエスト処理中のみメモリに保持されます。
+-
+-## 6) セキュリティ
+-- プロバイダーAPIキーは保管時に暗号化されます。
+-- データベースは、ボットのランタイムとサーバーアクセス権を持つ運営者に制限されています。完全に安全な方法は存在しません。機密性の高いデータや規制されたデータを送信しないでください。
+-
+-## 7) 子供のデータ
+-- TomoriBotは13歳以上(または現地のDiscord最低年齢)のユーザーを対象としています。13歳未満のユーザーから意図的にデータを収集することはありません。
+-
+-## 8) 変更
+-- 本プライバシーポリシーは更新される場合があり、その際は「最終更新日」が変更されます。更新後の継続使用は、改訂版の受諾を意味します。
+-
+-## 9) お問い合わせ
+-- ホスティング版インスタンスのプライバシーに関する質問や、上記コマンド以外のリクエストについては、メール`bredrumb@gmail.com`、プロジェクトGitHub issues、または[公式TomoriBotサポートDiscordサーバー](https://discord.gg/bjCfHm9QsB)を通じてお問い合わせください。
+-
+-## 10) 国際ユーザーとGDPR
+-- TomoriBotのホスティングサービスは、ホスティングプロバイダーのインフラストラクチャに従ってデータを保存し、グローバルに運用されています。
+-- 欧州経済領域(EEA)、英国、またはスイスのユーザーの場合:一般データ保護規則(GDPR)の下で、アクセス、修正、消去、処理の制限、データポータビリティ、および個人データの処理に対する異議申し立ての権利を含む追加の権利があります。
+-- セクション4で説明されているデータコントロール(エクスポート、削除、オプトアウト)は、ほとんどのGDPR権利を満たしています。追加のリクエストについては、セクション9の方法でお問い合わせください。
+-- 処理の法的根拠:正当な利益(ボット機能)、契約(サービス提供)、同意(メモリーやリマインダーなどのオプション機能)。
++「サーバー」「メモリー」「人格・プリセット」「プロバイダー」「トリガー」「APIキー」などの用語は、[利用規約](/legal/terms-of-service/)で定義しています。定義については同文書をご参照ください。
++
++## 要点
++
++- Discordのチャット履歴の複製は保持しません。TomoriBotは応答を作成する間だけ直近のメッセージを読み取り、その後破棄します。
++- ただし短期記憶が有効な場合、その会話から作成した短い要約は保存します。要約は一定期間（既定では90日）活動がないと削除されます。
++- 意図的にTomoriBotへ教えたもの（メモリー、人格設定、アップロードした資料）は、誰かが削除するまで保存されます。
++- 応答の際、TomoriBotはあなたのプロンプトと直近の文脈を、そのサーバーに設定されたAIプロバイダーへ送信します。プロバイダーには独自の規約とプライバシー慣行があり、当方の管理は及びません。
++- `/personal nuke`は、すべてのサーバーにおいて当方が保存するあなたの情報をすべて消去します。
++
++以下の各項で、これらの詳細を説明します。
++
++## 1) 本ポリシーの対象
++
++本ポリシーは公式ホスティング版TomoriBotインスタンスに適用されます。TomoriBotの設定はサーバー管理者が行いますが、コマンドを実行したかどうかにかかわらず、TomoriBotがメッセージを処理するすべてのメンバーが本ポリシーの対象です。
++
++サーバー管理者は`/setup`の際に利用規約に同意し、プライバシーポリシーを読んだうえで、その内容をサーバーのメンバーに周知することを確認します。メンバーはいつでも`/legal privacy-policy`と`/legal terms-of-service`で最新の文書を閲覧できます。
++
++## 2) 保存する情報
++
++### 2.1) あなたに関するもの
++- **識別情報と設定：** Discordユーザーid、言語設定、プライバシーのオプトアウト状態。
++- **パーソナライズ設定：** 選択した呼び名、代名詞、性自認、呼びかけ方、外見タグ、なりすまし用プロンプト、キャラクター参照画像のURL、タイムゾーンオフセット、メッセージの接頭辞・接尾辞の上書き。
++- **呼び名の設定：** 各人格があなたをどう呼ぶか。
++- **個人メモリー：** あなた自身についてTomoriBotに教えた事実、および個人メモリーが有効なときにTomoriBotが保存した事実。
++- **スポットライト：** サーバーごとに設定した個人スポットライトの構成。
++- **条件付けの記録：** `/reward`と`/punish`で入力した内容と理由。これらはそのサーバーでの人格の振る舞いを形づくります。
++- **利用カウンター：** 使用したコマンド・モデル・ツールの日次件数とトークン数を、あなた・サーバー・人格ごとに記録したもの。`/stats`の集計に使われます。
++
++### 2.2) サーバーに関するもの
++- **サーバー設定：** 人格の属性、サンプル会話、トリガーワード、プロバイダーとモデルの選択、チャンネルとロールの権限、クォータ、タイムゾーン、機能のオンオフ。
++- **サーバーメモリー：** サーバー全体のためにTomoriBotへ教えた事実。書いた本人以外のメンバーについて記述している場合もあります。
++- **絵文字・スタンプのメタデータ：** Discord id、名称、説明、形式フラグ。画像ファイル自体は保存しません。
++- **リマインダー：** 本文、対象ユーザーのDiscord idと呼び名、チャンネル、予定時刻、繰り返し設定。
++- **短期記憶の要約：** 短期記憶が有効な場合、トリガー間で文脈を保つため、直近の会話から作成した短い要約をデータベースに書き込みます。一定期間（既定では90日）活動がないと削除されます。
++- **連携情報：** Matrixのルームとチャンネルの対応、および管理者が接続したMCPサーバーのURL、検出されたツール名、暗号化された認証トークン。
++
++### 2.3) 認証情報
++- サーバー単位または個人単位で保存を選んだ**プロバイダーのAPIキー**。
++- エンドポイントURLとBearerトークンを含む**カスタムエンドポイントの定義**。
++
++認証情報はすべて保存時に暗号化されます。
++
++### 2.4) アップロードした内容
++- **資料：** サーバーのナレッジベースへアップロードしたファイルから抽出した全文と、ファイル名、メディア種別、サイズ、そのテキストから生成した検索用の埋め込み。
++- **人格の画像：** 人格の表示を一貫させるため、アバター、スプライト、キャラクター参照画像をオブジェクトストレージに保存します。
++- **音声サンプル：** 音声クローンを設定した場合の音声サンプルと参照用テキスト。
++
++### 2.5) 運用記録
++- **エラーログ：** インタラクションid、ユーザーidとサーバーid、コマンド名、エラー種別、スタックトレース。メッセージ本文や会話は記録しません。保持期間は90日です。
++- **性能メトリクス：** サービスの健全性を保つための処理時間とリソースの計測値。保持期間は30日です。
++- **人格メッセージの対応記録：** TomoriBotが自身のメッセージを更新・整理できるよう、送信済みメッセージと使用した人格スプライトを結びつけるDiscordメッセージidとチャンネルid。保持期間は30日です。
++
++## 3) 保存しない情報
++
++以下は応答の準備中に読み取るだけで、データベースには書き込みません。
++
++- **Discordのメッセージ：** 文脈を組み立てるため直近のメッセージ（通常は最新80件）をメモリー上で読み取り、設定されたプロバイダーへ送信します。応答の生成後に破棄されます。短期記憶が有効な場合は、2.2で述べた要約が別途保持されることがあります。
++- **添付ファイルとメディア：** トリガー時に解析した画像、動画、プロフィール画像はメモリー上で処理し、破棄します。
++- **サーバーとチャンネルのメタデータ：** サーバー名、説明、チャンネル名、トピックは毎回取得し直します。
++- **プレゼンス情報：** 取得できる場合の現在のアクティビティやステータス。
++- **絵文字・スタンプの画像：** 使用のたびにDiscordから取得します。
++
++## 4) 第三者への送信
++
++- **AIプロバイダー：** あなたのプロンプト、上記の直近の文脈、人格データ、添付ファイルは、そのサーバーまたはあなた個人に設定されたプロバイダー（Google、OpenRouter、NovelAI、カスタムエンドポイントなど）へ送信されます。テキスト、画像認識、埋め込み、画像生成、動画生成、音声合成、文字起こしの各リクエストが該当します。送信された内容には各社の規約、プライバシーポリシー、安全フィルター、保持規則が適用され、当方の管理は及びません。
++- **検索プロバイダー：** ウェブ検索が有効な場合、検索クエリと関連する文脈が設定済みの検索プロバイダーへ送信されます。
++- **Matrix：** チャンネルにMatrixブリッジが設定されている場合、メッセージはDiscordと連携先のMatrixルームの間を行き来します。
++
++個人データを販売することはありません。共有は、利用する機能の提供に必要な範囲、または法令が要求する場合に限られます。
++
++## 5) 保持期間
++
++| データ | 保持期間 |
++|---|---|
++| 短期記憶の要約 | 最終活動から90日（既定） |
++| エラーログ | 90日 |
++| 性能メトリクス | 30日 |
++| 人格メッセージの対応記録 | 30日 |
++| 第2項のその他すべて | 第6項のコマンドで削除されるまで |
++
++TomoriBotをサーバーから退出させた場合、再招待時に設定が復元できるよう、そのサーバーのデータは保持されます。削除を希望する管理者は、退出させる前に`/nuke`を実行してください。
++
++## 6) あなたが操作できること
++
++| 目的 | コマンド |
++|---|---|
++| 自分に関する個人メモリーの保存を停止する | `/personal config` |
++| 個々の個人メモリーを確認・削除する | `/personal memories` |
++| サーバーメモリーと資料を確認・削除する | `/memories` |
++| 個人データの複製を取得する | `/export personal config`、`/export personal memories` |
++| サーバーデータの複製を取得する | `/export config`、`/export memories` |
++| 個人設定を初期値に戻す | `/reset personal config` |
++| すべてのサーバーで自分の情報をすべて消去する | `/personal nuke` |
++| サーバーのデータを消去する（管理者のみ） | `/nuke` |
++
++`/personal nuke`は、個人メモリー、パーソナライズと呼び名の設定、スポットライト、保存済みのプロバイダーキーと個人用エンドポイント、登録したモデル、利用カウンター、あなたが与えた人格の条件付け、そしてあなたが作成したリマインダーを削除します。実行前に知っておくべき点が2つあります。
++
++- `/reward`と`/punish`で与えた条件付けは、そのサーバーの人格の振る舞いを全員に対して形づくっています。そのため削除すると、共有されている振る舞いが変わります。
++- あなたが教えたサーバーメモリーとアップロードした資料はサーバーに属するため、作成者情報だけを外して保持されます。あなたについて記述したものがある場合は、管理者に`/memories`での削除を依頼してください。他の人が作成した、あなた宛てのリマインダーも保持されます。
++
++オプトアウトの設定は意図的に消去の対象外としています。消去によって、あなたに関する収集が知らないうちに再開されることを防ぐためです。
++
++これらのコマンドで対応できない事項については、第9項の連絡先までご連絡ください。個別に対応します。
++
++## 7) セキュリティ
++
++- プロバイダーのAPIキー、Bearerトークン、MCPの認証情報は保存時に暗号化されます。
++- データベース接続には、証明書検証を伴うTLSを使用します。
++- データベースへのアクセスは、ボットの実行環境とインフラ権限を持つ運用者に限定しています。
++
++完全に安全なシステムは存在しません。極めて機微な情報や法規制の対象となる情報をTomoriBotに与えないでください。
++
++## 8) 子どものデータ
++
++TomoriBotは、居住国でDiscordが定める最低年齢（13歳以上）に満たない方を対象としていません。その年齢に満たない利用者のデータを、当方が知りながら収集することはありません。該当する年齢に満たない方のデータを保有していると思われる場合は、第9項の連絡先までご連絡ください。削除いたします。
++
++## 9) 連絡先
++
++上記コマンドで対応できないプライバシーに関するお問い合わせやご請求は、`bredrumb@gmail.com`宛のメール、または[TomoriBot公式サポートDiscordサーバー](https://discord.gg/bjCfHm9QsB)へお寄せください。個人データに関わる内容は、公開されるGitHubのissueではなく、メールまたはダイレクトメッセージをご利用ください。
++
++## 10) 変更
++
++本プライバシーポリシーは更新されることがあり、その際は冒頭の「最終更新日」を変更します。重要な変更はサポートDiscordまたはプロジェクトのリポジトリでお知らせします。
++
++## 11) 海外の利用者とGDPR
++
++- TomoriBotのホスティングサービスは世界中で利用でき、データはホスティング事業者が運用する基盤に保存されます。
++- 欧州経済領域、英国、スイスにお住まいの場合、GDPRに基づき、個人データへのアクセス、訂正、削除、処理の制限、データポータビリティの各権利と、処理に異議を述べる権利があります。
++- 第6項の操作により、アクセス、ポータビリティ、削除には直接対応できます。その他については第9項の連絡先までご連絡ください。
++- 処理の法的根拠は次のとおりです：利用する機能を提供するための契約の履行、セキュリティ・不正利用防止・サービス安定性のための正当な利益、および個人メモリー、短期記憶、ウェブ検索など任意で有効化する機能についての同意。同意は当該機能を無効にすることで撤回できます。
+diff --git a/docs/ja/legal/terms-of-service.md b/docs/ja/legal/terms-of-service.md
+index d58106d6..29192636 100644
+--- a/docs/ja/legal/terms-of-service.md
++++ b/docs/ja/legal/terms-of-service.md
+@@ -4,68 +4,87 @@ description: TomoriBot公式ホスト版インスタンスの利用に適用さ
+ aiGenerated: false
+ ---
+ 
+-最終更新日: 2026-01-15
++最終更新日: 2026-09-12
+ 
+ TomoriBotを設定または使用することにより、本規約、Discordの利用規約、およびコミュニティガイドラインに同意したものとみなされます。本規約は、Discord上の公式ホスティング版TomoriBotインスタンスに適用されます。TomoriBotのオープンソースリポジトリから独自のコピーを実行する場合、本規約は適用されません。代わりに`LICENSE`のAGPLv3ライセンスが適用され、自己ホスティング環境におけるデータ処理は自身で管理します。
+ 
+ ## 1) 用語の定義
+-明確化のため、本文書では以下の用語を使用します:
+-- **サーバー:** TomoriBotが設定されているDiscordギルド/コミュニティ
+-- **メモリー:** `/teach`コマンドを通じてTomoriBotに教えられた事実や情報、または`remember_this_fact`関数ツールを通じて自己学習されたもの
+-- **ペルソナ/プリセット:** TomoriBotのレスポンス方法を変更する、設定可能な性格および行動プロファイル
+-- **プロバイダー:** TomoriBotが使用するように設定された第三者のAIまたは検索サービス(例:Google、NovelAI、OpenRouter、Brave Search)
+-- **ホスティング版インスタンス:** Discordの公開ボットとして維持されている公式TomoriBotサービス。自己ホスティング版とは異なります
+-- **APIキー:** 選択したプロバイダーにTomoriBotを接続するために提供する認証資格情報
+-- **トリガー:** 設定されたプロバイダーを使用してTomoriBotがDiscordテキストチャンネルでレスポンスを生成する原因となるイベント。例:ボットへのメンション、メッセージへの返信、AI/検索処理を必要とするスラッシュコマンドの使用、または自動返信が有効化されているチャンネルでのメッセージ送信。トリガーはプロバイダーアカウントのAPIクレジット/トークンを消費します。
++本文書では次の用語を使用します。
++- **サーバー**：TomoriBotを設定したDiscordのギルドやコミュニティ
++- **メモリー**：コマンドによってTomoriBotに教えた情報、または`remember_this_fact`関数ツールを通じてTomoriBot自身が学習した情報
++- **人格・プリセット**：TomoriBotの応答の仕方を変える、設定可能な性格・行動プロファイル
++- **プロバイダー**：TomoriBotに設定して利用する第三者のAIまたは検索サービス（Google、NovelAI、OpenRouter、Brave Searchなど）
++- **ホスト版インスタンス**：自己ホスティング版と区別される、Discord向けの公開ボットとして運営される公式のTomoriBotサービス
++- **APIキー**：TomoriBotを任意のプロバイダーへ接続するために提供する認証情報
++- **トリガー**：設定済みのプロバイダーを用いて、TomoriBotがDiscordのテキストチャンネルで応答を生成する契機となる事象。ボットへのメンション、その発言への返信、AIや検索処理を伴うスラッシュコマンドの使用、自動応答が有効なチャンネルへの投稿などが該当します。トリガーはプロバイダーアカウントのAPIクレジットやトークンを消費します。
++- **サーバー管理者**：`/setup`を実行するメンバーなど、そのサーバーでTomoriBotを設定する権限を持つメンバー
+ 
+ ## 2) サービスの範囲
+-- TomoriBotは、設定された外部プロバイダーを使用してDiscordインタラクションに応答するAI搭載チャットボットです。
+-- メンテナンス、安全性、または法的理由により、TomoriBotの機能をいつでも変更、停止、または終了する場合があります。
++- TomoriBotは、利用者が設定した外部プロバイダーを用いてDiscord上のやり取りに応答する、AI搭載のチャットボットです。
++- 保守、安全性、法令上の理由により、TomoriBotの機能をいつでも変更、停止、終了することがあります。
+ 
+-## 3) 利用者の責任
+-- TomoriBotを違法、有害、またはプラットフォームで禁止されているコンテンツ、ハラスメント、または不正アクセスの試行に使用しないでください。
+-- TomoriBotを使用するには、少なくとも13歳以上(または管轄区域のDiscordが要求する最低年齢)である必要があります。サービスを使用することにより、この年齢要件を満たしていることを表明します。
+-- 利用者またはサーバーメンバーが提供するコンテンツ(メッセージ、メモリー、ペルソナデータ、アップロード)について責任を負います。共有する権利があることを確認し、設定されたプロバイダーによって処理されたくない機密データを避けてください。
+-- レート制限を尊重し、サービスを劣化させるスパムや不正使用を避けてください。
++## 3) 誰が何に同意するか
++- サーバー管理者は`/setup`の完了時に、そのサーバーについて本規約に同意し、あわせてプライバシーポリシーを読んだうえで、その内容をサーバーのメンバーに周知することを確認します。
++- サーバー管理者は、他のメンバーに代わって本規約に同意することはできず、他のメンバーの年齢や行為を保証するものでもありません。各メンバーは、TomoriBotを利用することで自身について本規約に同意したものとみなされます。
++- メンバーはいつでも`/legal terms-of-service`と`/legal privacy-policy`で最新の文書を閲覧できます。
++- サーバー管理者は、TomoriBotが導入されていることとメッセージの処理方法をメンバーに伝える責任、および利用可能なチャンネルとロールの設定でTomoriBotがメッセージを読み取る範囲を限定する責任を負います。
+ 
+-## 4) 第三者プロバイダーとモデル
+-- TomoriBotを外部プロバイダー(例:Anthropic、Google Gemini、OpenAI/OpenRouter、NovelAI、Brave Search)に接続できます。それらの利用規約、プライバシーポリシー、安全フィルター、請求がそれらを通じて送信されるコンテンツに適用されます。
+-- TomoriBotは、Discordまたはこれらのプロバイダーのいずれとも提携、支持、またはスポンサー関係にありません。当サービスは、それらのAPIと統合する独立したサービスです。
+-- これらのプロバイダーの動作、保持、または安全ポリシーを制御することはできません。TomoriBotで設定する前に、選択したプロバイダーの規約を確認してください。
+-- AI生成コンテンツは、安全フィルターにもかかわらず、不正確、偏向、または不適切な場合があります。TomoriBotはAI出力を検証または支持しません。
++## 4) 利用者の責任
++- 違法・有害な用途、プラットフォームが禁じる内容、嫌がらせ、不正アクセスの試みにTomoriBotを使用しないでください。
++- TomoriBotの利用には、居住国でDiscordが定める最低年齢（13歳以上）を満たしている必要があります。本サービスを利用することで、この年齢要件を満たしていることを表明したものとみなされます。
++- 提供する内容（メッセージ、メモリー、人格データ、アップロード）について、利用者が責任を負います。共有する権利があることを確認し、設定したプロバイダーに処理させたくない機微な情報は避けてください。
++- レート制限を尊重し、サービスを劣化させるスパムや濫用を行わないでください。
+ 
+-## 5) APIキーと請求
+-- AI/検索プロバイダーのAPIキーを提供する場合、TomoriBotがそれらを保存し、リクエストを処理するために使用することを承認します。提供されたすべてのキーは保管時に暗号化されます。
+-- 合法的に使用が許可されているAPIキーのみを提供する必要があります。これは、自身のアカウントでプロバイダーから直接取得したキー、またはアカウント所有者から明示的に使用を許可されたキーを意味します。以下は厳禁です:
+-  - 盗まれた、漏洩した、または侵害されたAPIキー
+-  - 無許可の第三者やブラックマーケットから購入したキー
++## 5) 年齢制限のあるコンテンツ
++- 成人向けの内容を生成する機能は既定で無効であり、サーバー管理者が意図的に有効化する必要があります。
++- これを有効化するサーバー管理者は、自身が18歳以上であること、および当該内容を成人のみがアクセスできるDiscordの年齢制限チャンネルに限定することを確認したものとみなされます。
++- Discordのコミュニティガイドラインまたは法令が禁じる内容は、設定、チャンネルの指定、年齢の確認にかかわらず、引き続き禁止されます。
++- 未成年者に届いている、または禁止された内容を生成していると認められる場合、当該サーバーでこれらの機能を無効化し、またはアクセスを停止することがあります。
++
++## 6) 第三者のプロバイダーとモデル
++- TomoriBotを外部プロバイダー（Anthropic、Google Gemini、OpenAI/OpenRouter、NovelAI、Brave Searchなど）に接続できます。各社の規約、プライバシーポリシー、安全フィルター、課金は、そこへ送信した内容に適用されます。
++- 本規約への同意はTomoriBotのみを対象とします。各プロバイダーの規約への同意にはあたらず、それらの規約の適用を免れるものでもありません。TomoriBotに設定する前に、選択したプロバイダーの規約をご確認ください。
++- TomoriBotは、Discordおよびこれらのプロバイダーと提携しておらず、これらによる推奨や支援も受けていません。当方は各社のAPIと連携する独立したサービスです。
++- これらのプロバイダーの挙動、データ保持、安全性に関する方針を、当方が管理することはできません。
++- 安全フィルターを経ていても、AIが生成した内容は不正確、偏向的、または不適切である場合があります。TomoriBotはAIの出力を検証・推奨するものではありません。
++
++## 7) APIキーと課金
++- AIや検索のプロバイダー向けAPIキーを提供する場合、リクエストを処理する目的でTomoriBotがそれを保存し使用することを承諾したものとみなされます。提供されたキーはすべて保存時に暗号化されます。
++- 法的に使用権のあるAPIキーのみを提供してください。すなわち、自身のアカウントでプロバイダーから直接取得したキー、またはアカウント保有者から明示的に使用を許諾されたキーに限ります。次のものは固く禁じます。
++  - 盗取、流出、または不正取得されたAPIキー
++  - 権限のない第三者や闇市場から購入したキー
+   - プロバイダーの利用規約に違反して共有されたキー
+-- 提供するAPIキーの正当性について、すべての法的責任を負うものとします。
+-- APIキーは、TomoriBotへの明示的なインタラクションを処理するためにのみ使用します。APIキーをプールしたり、他のユーザーのリクエストを処理するために使用したり、テスト、開発、分析、または利用者とサーバーメンバーのTomoriBotへの直接リクエストの実行以外の目的で使用したりすることはありません。
+-- 利用者のAPIキーに関連付けられた各TomoriBotトリガーによって発生するすべてのプロバイダー側のコストとアカウント使用について責任を負います。使用と請求についてAPIキーダッシュボードを監視してください。`/tool estimate cost`コマンドは、トリガーあたりのコストの大まかな見積もりを提供します。
+-- 最小限の必要な権限を持つAPIキーを使用し、利用可能な場合はプロバイダー固有のレート制限と支出上限の使用を検討することをお勧めします。
++- 提供するAPIキーの正当性について、利用者がすべての法的責任を負います。
++- 提供されたAPIキーは、利用者自身によるTomoriBotへの明示的な操作を処理する目的にのみ使用します。APIキーを共用すること、他の利用者のリクエスト処理に使うこと、試験・開発・分析その他、利用者およびそのサーバーメンバーによる直接の要求を満たす以外の目的に使うことはありません。
++- 各トリガーによって当該APIキーに生じるプロバイダー側の費用と利用量は、すべて利用者の負担です。APIキーのダッシュボードで利用状況と請求を確認してください。`/tool estimate cost`コマンドで、トリガーあたりの概算費用を確認できます。
++- APIキーには必要最小限の権限を設定し、可能であればプロバイダー側のレート制限と支出上限を併用することを推奨します。
+ 
+-## 6) データ処理
+-- 収集されるデータと使用目的は、プライバシーポリシーに記載されています。TomoriBotを設定または使用することにより、プライバシーポリシーにも同意したものとみなされます。
+-- 利用可能なボット内コマンドを使用してデータをエクスポートまたは削除できます。一部のレコードは、法律またはセキュリティ上の理由で保持される場合があります。
++## 8) データの取り扱い
++- 収集する情報、保持期間、利用目的は[プライバシーポリシー](/legal/privacy-policy/)に記載しています。
++- 同文書に挙げたコマンドで、データの取得と消去ができます。`/personal nuke`はすべてのサーバーにおける個人データを消去し、`/nuke`はサーバーのデータを消去します（後者はサーバー管理者に限られます）。
++- サーバーメモリーやアップロードした資料など、サーバーに属する内容は、作成者情報を外したうえで個人データの消去後も保持されます。特定の項目の削除は、サーバー管理者に`/memories`での対応を依頼してください。
++- 一部の運用記録は、記載された保持期間の間、または法令上もしくは安全上必要な場合はそれ以上、保持されることがあります。
+ 
+-## 7) 可用性、サポート、および変更
+-- サービスの可用性は保証されません。停止、メンテナンス、またはレート制限によってレスポンスが中断される場合があります。
+-- 本規約はいつでも更新される場合があります。重要な変更は、サポートDiscordまたはプロジェクトGitHubを通じて少なくとも30日前に通知され、「最終更新日」の更新によって反映されます。変更後もボットを使用し続けることは、改訂された規約に同意することを意味します。
++## 9) 提供、サポート、変更
++- サービスの提供を保証するものではありません。障害、保守、レート制限により応答が中断することがあります。
++- 本規約はいつでも更新されることがあります。重要な変更は、サポートDiscordまたはプロジェクトのリポジトリを通じて30日以上前にお知らせし、「最終更新日」の更新により反映します。変更後も利用を継続した場合、改定後の規約に同意したものとみなされます。
+ 
+-## 8) 終了
+-- 本規約違反、法的要件、または安全/セキュリティ上の懸念により、アクセスを停止または削除する場合があります。TomoriBotはいつでも削除できます。削除前に`/data delete`コマンドを使用して保存されたデータを削除することを検討してください。
++## 10) 終了
++- 本規約への違反、法令上の要請、または安全・セキュリティ上の懸念がある場合、利用を停止または削除することがあります。
++- TomoriBotはいつでも退出させることができます。退出させても再招待に備えてサーバーのデータは保持されるため、事前に`/nuke`の実行をご検討ください。
+ 
+-## 9) 免責事項と責任
+-- サービスは「現状のまま」および「利用可能な状態で」提供され、いかなる種類の保証もありません。商品性、特定目的への適合性、非侵害、および中断のない可用性の黙示的保証を否認します。
+-- 保管時の暗号化、証明書検証付きのデータベース接続用SSL/TLS、安全な資格情報処理を含む、業界標準のセキュリティ慣行を実装しています。ただし、すべての潜在的な脅威、侵害、または不正アクセスに対する絶対的なセキュリティを保証することはできません。
+-- 法律で許可される最大限の範囲で、以下について責任を負いません:
+-  - 間接的、付随的、結果的、または懲罰的損害
+-  - 第三者プロバイダーまたはユーザーの行為
+-  - TomoriBotが保存するデータ(APIキー、メモリー、ペルソナ、設定を含む)への不正アクセス、盗難、破損、または損失
+-  - 当方の重大な過失または意図的な不正行為の場合を除く、いかなる損害
+-  - 当方の総責任は、(a)サービスに対して支払われた金額(通常は0米ドル。任意の寄付はサービスの対価ではありません)、または(b)すべての請求の合計で10米ドルのいずれか大きい方に制限されます。
+-  - ホスティング版TomoriBotサービスを使用することにより、これらのリスクを受け入れます。これらのリスクに不安がある場合は、オープンソースリポジトリからTomoriBotを自己ホスティングすることを検討してください。そこでは、データの保存、暗号化、およびセキュリティ慣行を完全に制御できます。
++## 11) 免責と責任の制限
++- 本サービスは「現状有姿」かつ「提供可能な範囲」で提供され、いかなる保証も行いません。商品性、特定目的への適合性、権利非侵害、および中断のない提供に関する黙示の保証を否認します。
++- 認証情報は保存時に暗号化し、データベース接続には証明書検証を伴うTLSを使用し、データベースへのアクセスはボットの実行環境とインフラ権限を持つ運用者に限定しています。完全に安全なシステムは存在せず、あらゆる脅威、侵害、不正アクセスからの保護を保証することはできません。
++- 法令が認める最大限の範囲において、当方は次について責任を負いません。
++  - 間接損害、付随的損害、結果的損害、懲罰的損害
++  - 第三者のプロバイダーまたは利用者の行為
++  - TomoriBotが保存するデータ（APIキー、メモリー、人格、各種設定を含む）への不正アクセス、盗取、破損、喪失
++  - 当方の重過失または故意による不正行為の場合を除く、一切の損害
++- 当方の賠償責任の総額は、（a）本サービスに対して利用者が支払った金額（通常は0米ドル。任意の寄付はサービスの対価ではありません）、または（b）すべての請求を合わせて10米ドルのいずれか高い方を上限とします。
++- ホスト版TomoriBotサービスを利用することで、これらのリスクを受け入れたものとみなされます。受け入れがたい場合は、データの保存、暗号化、セキュリティ運用を自身で完全に管理できる、オープンソースリポジトリからの自己ホスティングをご検討ください。
++- 本規約のいかなる定めも、適用される法令のもとで制限できない利用者の権利を制限するものではありません。
+ 
+-## 10) お問い合わせ
+-- ホスティング版インスタンスの質問や懸念については、メール`bredrumb@gmail.com`、プロジェクトGitHub issues、または[公式TomoriBotサポートDiscordサーバー](https://discord.gg/bjCfHm9QsB)を通じてお問い合わせください。
++## 12) 報告と連絡先
++- お問い合わせ、濫用の報告、セキュリティの報告、および該当する最低年齢に満たない方のデータをTomoriBotが保有しているとの報告は、`bredrumb@gmail.com`宛のメール、または[TomoriBot公式サポートDiscordサーバー](https://discord.gg/bjCfHm9QsB)へお寄せください。
++- 個人データやセキュリティ上の脆弱性に関わる内容は、公開されるGitHubのissueではなく、メールまたはダイレクトメッセージをご利用ください。
+diff --git a/scripts/checks/docs-mention-baseline.json b/scripts/checks/docs-mention-baseline.json
+index 8c792b7f..eba293ed 100644
+--- a/scripts/checks/docs-mention-baseline.json
++++ b/scripts/checks/docs-mention-baseline.json
+@@ -37,22 +37,6 @@
+       "path": "context-note",
+       "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+     },
+-    {
+-      "path": "data delete",
+-      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+-    },
+-    {
+-      "path": "data delete personal",
+-      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+-    },
+-    {
+-      "path": "data delete server",
+-      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+-    },
+-    {
+-      "path": "data export",
+-      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+-    },
+     {
+       "path": "emoji",
+       "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+diff --git a/src/locales/en-US/commands/personal.ts b/src/locales/en-US/commands/personal.ts
+index d349d00a..0676c13c 100644
+--- a/src/locales/en-US/commands/personal.ts
++++ b/src/locales/en-US/commands/personal.ts
+@@ -4,6 +4,24 @@ export default {
+     providers: {
+       description: `Manage your personal provider credentials, endpoints, and model catalogs.`,
+     },
++    nuke: {
++      description: `Erase everything TomoriBot stores about you, in every server.`,
++      confirmation_description: `Confirm you want to permanently erase your personal data. This cannot be undone.`,
++      confirmation_choice_yes: `Yes, erase my data`,
++      confirmation_choice_no: `No, cancel`,
++      cancelled_title: `Erasure Cancelled`,
++      cancelled_description: `Nothing was changed. Your data is untouched.`,
++      no_data_title: `Nothing to Erase`,
++      no_data_description: `TomoriBot has no stored record for you.`,
++      success_title: `Personal Data Erased`,
++      success_description: `Erased in every server: personal memories, your personalization settings and naming preferences, spotlights, your saved provider keys, personal endpoints and registered models, your usage statistics, and **{reminders_deleted}** reminder(s) you created.
++
++Persona conditioning you contributed through \`/reward\` and \`/punish\` was also removed, so affected personas may behave differently for everyone in those servers.
++
++Server memories you taught and documents you uploaded belong to their servers and were kept, with your authorship removed. Use \`/memories\` to remove any that describe you. Opt-outs you set stay in place.
++
++TomoriBot will treat you as a new user from your next message.`,
++    },
+     memories: {
+       description: `Manage your personal long-term memories and short-term conversational context.`,
+       outdated_panel: `This panel is outdated. Use {command} to open a fresh panel.`,
+diff --git a/src/locales/en-US/commands/setup.ts b/src/locales/en-US/commands/setup.ts
+index 4db2936a..2fe207fe 100644
+--- a/src/locales/en-US/commands/setup.ts
++++ b/src/locales/en-US/commands/setup.ts
+@@ -102,16 +102,22 @@ Try {model_text_command} to assign a working model, or {provider_add_command} to
+       policies_name: `Policies`,
+       policies_description: `Review and accept the Terms of Service and Privacy Policy.`,
+       policies_pending: `Not yet reviewed.`,
+-      policies_completed: `Terms of Service and Privacy Policy accepted.`,
++      policies_completed: `Policies reviewed and accepted.`,
+       policies_button_start: `Review & Accept Policies`,
+       policies_button_edit: `Review Policies`,
+       policies_modal_title: `Policies`,
+-      policies_modal_context: `Review the active policies for this hosted instance.`,
+-      policies_modal_acceptance: `By continuing you confirm that you have read and accept the [Terms of Service]({terms_url}) and [Privacy Policy]({privacy_url}) for this setup.`,
+-      policies_modal_choice_label: `Accept both to continue`,
+-      policies_choice_terms: `I accept the Terms of Service`,
+-      policies_choice_privacy: `I accept the Privacy Policy`,
+-      policies_required: `Accept both policies to continue.`,
++      policies_modal_context: `Please review TomoriBot's policies before finishing setup.
++
++When TomoriBot is triggered it sends recent messages from
++that channel to this server's AI provider. Providers and
++custom endpoints have their own terms and privacy
++practices, so please review those separately.`,
++      policies_modal_acceptance: `By continuing you confirm that you have read and accept TomoriBot's [Terms of Service]({terms_url}) and [Privacy Policy]({privacy_url}), and that you will make this information available to your server members.`,
++      policies_modal_choice_label: `Confirm all three to continue`,
++      policies_choice_terms: `I accept TomoriBot's Terms of Service`,
++      policies_choice_privacy: `I have read TomoriBot's Privacy Policy`,
++      policies_choice_members: `I'll let my server members know`,
++      policies_required: `Confirm all three items to continue.`,
+       policies_denied: `Policy acceptance is not part of this setup.`,
+       provider_name: `AI Provider`,
+       provider_description: `Choose how replies will access an AI model.`,
+diff --git a/src/locales/en-US/general.ts b/src/locales/en-US/general.ts
+index 638d13a4..8635f785 100644
+--- a/src/locales/en-US/general.ts
++++ b/src/locales/en-US/general.ts
+@@ -15,7 +15,7 @@
+     },
+     legal: {
+       policy_reference: `View the active Terms of Service and Privacy Policy anytime with \`/legal terms-of-service\` and \`/legal privacy-policy\`.`,
+-      setup_agreement: `Setting up TomoriBot means that you and your server members agree to its \`/legal terms-of-service\` and \`/legal privacy-policy\` notices`,
++      setup_agreement: `Setting up TomoriBot means you accept its \`/legal terms-of-service\` and \`/legal privacy-policy\`, and that you will let your server members know how TomoriBot handles their messages`,
+       provider_policy_reference: `For full details, see \`/legal privacy-policy\` and \`/legal terms-of-service\``,
+       data_handling_reference: `**Privacy:** See \`/legal privacy-policy\` for full data handling details`,
+     },
+diff --git a/src/locales/ja/commands/personal.ts b/src/locales/ja/commands/personal.ts
+index d46bfe29..65c3e354 100644
+--- a/src/locales/ja/commands/personal.ts
++++ b/src/locales/ja/commands/personal.ts
+@@ -1,6 +1,24 @@
+ export default {
+   personal: {
+     description: `あなたの個人的な設定を管理します`,
++    nuke: {
++      description: `TomoriBotが保存しているあなたの情報を、すべてのサーバーから消去します。`,
++      confirmation_description: `個人データを完全に消去することを確認してください。取り消せません。`,
++      confirmation_choice_yes: `はい、消去します`,
++      confirmation_choice_no: `いいえ、中止します`,
++      cancelled_title: `消去を中止しました`,
++      cancelled_description: `何も変更されていません。データはそのままです。`,
++      no_data_title: `消去するものがありません`,
++      no_data_description: `TomoriBotにあなたの記録は保存されていません。`,
++      success_title: `個人データを消去しました`,
++      success_description: `すべてのサーバーで消去しました：個人メモリー、パーソナライズ設定と呼び名の設定、スポットライト、保存済みのプロバイダーキー、個人用エンドポイントと登録モデル、利用統計、およびあなたが作成したリマインダー**{reminders_deleted}**件。
++
++\`/reward\`と\`/punish\`で与えた人格の条件付けも削除されたため、該当サーバーの人格の振る舞いが全員にとって変わる場合があります。
++
++あなたが教えたサーバーメモリーとアップロードした資料はサーバーに属するため、作成者情報だけを外して保持されます。あなたに関する記述は\`/memories\`から削除してください。設定したオプトアウトはそのまま残ります。
++
++次のメッセージから、TomoriBotはあなたを新規ユーザーとして扱います。`,
++    },
+     "image-tags": {
+       description: `画像生成を補助するため、自分の外見・身体的特徴をカンマ区切り画像タグで設定します。`,
+       modal_title: `自分の画像タグ`,
+diff --git a/src/locales/ja/general.ts b/src/locales/ja/general.ts
+index 2a29582d..7be0670e 100644
+--- a/src/locales/ja/general.ts
++++ b/src/locales/ja/general.ts
+@@ -15,7 +15,7 @@
+     },
+     legal: {
+       policy_reference: `現在の利用規約とプライバシーポリシーは、いつでも \`/legal terms-of-service\` と \`/legal privacy-policy\` で確認できます。`,
+-      setup_agreement: `TomoriBotをセットアップすることで、あなたとサーバーメンバーは\`/legal terms-of-service\`と\`/legal privacy-policy\`の通知に同意したことになります`,
++      setup_agreement: `TomoriBotをセットアップすることで、\`/legal terms-of-service\`と\`/legal privacy-policy\`に同意し、メッセージの取り扱いをサーバーメンバーに知らせることになります`,
+       provider_policy_reference: `詳細は\`/legal privacy-policy\`と\`/legal terms-of-service\`をご覧ください`,
+       data_handling_reference: `**プライバシー:** データ処理の詳細は\`/legal privacy-policy\`をご覧ください`,
+     },
+diff --git a/src/types/db/dataExport.ts b/src/types/db/dataExport.ts
+index da859cf8..48a7f418 100644
+--- a/src/types/db/dataExport.ts
++++ b/src/types/db/dataExport.ts
+@@ -14,8 +14,7 @@ export const EXPORT_VERSION = "1.0";
+ export const EXPORT_V2_VERSION = "2.0";
+ 
+ /**
+- * Explicit file type identifiers for /data export and /data import.
+- * These map directly to user-facing export/delete choices.
++ * Explicit file type identifiers for /export and /import.
+  */
+ const DATA_EXPORT_TYPES = {
+   personal_memories: "personal_memories",
+diff --git a/src/utils/db/repositories/UserRepository.ts b/src/utils/db/repositories/UserRepository.ts
+index cf430513..4db1011f 100644
+--- a/src/utils/db/repositories/UserRepository.ts
++++ b/src/utils/db/repositories/UserRepository.ts
+@@ -1395,6 +1395,48 @@ class UserRepository implements IRepository<UserExportShape> {
+     }
+   }
+ 
++  /**
++   * Erases a user's own record, cascading every personal table.
++   *
++   * `users` is the cascade root for the personal tables (memories, personalization config,
++   * persona naming preferences, spotlights, saved provider configs, custom endpoint connections,
++   * scoped model registrations, conditioning history, stat counters). The four remaining
++   * references are ON DELETE SET NULL, so server memories, reminders, uploaded documents, and
++   * error logs survive with the authorship link severed rather than deleting content a server
++   * owns. The Privacy Policy describes exactly this split.
++   *
++   * Spotlight server ids are read inside the same transaction before the delete because the
++   * cascade destroys the rows that post-commit cache invalidation needs to target.
++   */
++  async nukeUser(userId: number): Promise<PersonalNukeResult | null> {
++    try {
++      return await sql.begin(async (tx: SQL) => {
++        const spotlights = await tx<Array<{ server_id: number }>>`
++          SELECT DISTINCT server_id FROM personal_spotlights WHERE user_id = ${userId}
++        `;
++
++        // Reminders are ON DELETE SET NULL so a server keeps ones it owns, but a reminder the
++        // user authored carries their own prose and schedule, and a null creator would leave it
++        // firing forever with nobody able to claim it. Erase those explicitly.
++        const reminders = await tx`DELETE FROM reminders WHERE created_by_user_id = ${userId}`;
++
++        const [deleted] = await tx<Array<{ user_disc_id: string }>>`
++          DELETE FROM users WHERE user_id = ${userId} RETURNING user_disc_id
++        `;
++        if (!deleted) return null;
++
++        return {
++          userDiscId: deleted.user_disc_id,
++          affectedServerIds: spotlights.map((row) => row.server_id),
++          remindersDeleted: reminders.count ?? 0,
++        };
++      });
++    } catch (error) {
++      log.error(`[PersonalNuke] Failed to erase user ${userId}`, error);
++      throw error;
++    }
++  }
++
+   private pushUnsafeUpdateValue(field: string, rawValue: unknown, setParts: string[], values: SqlParameterArray): void {
+     const placeholder = `$${values.length + 1}`;
+     if (Array.isArray(rawValue)) {
+@@ -1413,5 +1455,12 @@ class UserRepository implements IRepository<UserExportShape> {
+   }
+ }
+ 
++/** Outcome of a successful personal erasure, carrying the keys post-commit invalidation needs. */
++export interface PersonalNukeResult {
++  userDiscId: string;
++  affectedServerIds: number[];
++  remindersDeleted: number;
++}
++
+ /** Singleton instance: import this in callers. */
+ export const userRepository = new UserRepository();
+diff --git a/src/utils/discord/ui/setupPanel.ts b/src/utils/discord/ui/setupPanel.ts
+index f427becf..a86bc843 100644
+--- a/src/utils/discord/ui/setupPanel.ts
++++ b/src/utils/discord/ui/setupPanel.ts
+@@ -1154,7 +1154,7 @@ export function buildSetupSettingsModal(
+ 
+ export type SetupPoliciesModalField = "acceptance";
+ 
+-export const SETUP_POLICY_CHOICE_VALUES = ["tos", "privacy"] as const;
++export const SETUP_POLICY_CHOICE_VALUES = ["tos", "privacy", "members"] as const;
+ 
+ export function buildSetupPoliciesModalFieldId(field: SetupPoliciesModalField, nonce: string): string {
+   return `${field}_${nonce}`;
+@@ -1199,6 +1199,10 @@ export function buildSetupPoliciesModal(
+               label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.policies_choice_privacy"), 100),
+               value: "privacy",
+             },
++            {
++              label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.policies_choice_members"), 100),
++              value: "members",
++            },
+           ],
+         },
+       },
+diff --git a/tests/unit/discord/personalRegistration.test.ts b/tests/unit/discord/personalRegistration.test.ts
+index 5254ffbc..dc799a12 100644
+--- a/tests/unit/discord/personalRegistration.test.ts
++++ b/tests/unit/discord/personalRegistration.test.ts
+@@ -5,14 +5,15 @@ import { initializeLocalizer } from "@/utils/text/localizer";
+ beforeAll(async () => initializeLocalizer());
+ 
+ describe("/personal registration", () => {
+-  it("leaves only the accepted personal panel destinations", async () => {
++  it("leaves only the accepted personal leaves", async () => {
+     const { executionMap } = await loadCommandData();
+     const personal = executionMap.get("personal");
+ 
+     expect(personal).toBeDefined();
+     if (!personal) return;
+ 
+-    expect([...personal.keys()].sort()).toEqual(["config", "memories", "providers"]);
++    // `nuke` is the erasure route the Privacy Policy names, so it must stay registered.
++    expect([...personal.keys()].sort()).toEqual(["config", "memories", "nuke", "providers"]);
+   }, 30000);
+ 
+   // The legacy `/memory` root this Wave 5 slice partially dissolved (personal CRUD gone, transfer
+diff --git a/tests/unit/discord/setupWizardRoutes.test.ts b/tests/unit/discord/setupWizardRoutes.test.ts
+index c2c40457..26b3e255 100644
+--- a/tests/unit/discord/setupWizardRoutes.test.ts
++++ b/tests/unit/discord/setupWizardRoutes.test.ts
+@@ -1825,8 +1825,8 @@ describe("setupWizardRoutes", () => {
+     const wrapper = modal.components.find((component) => component.type === 18);
+     const checkboxGroup = wrapper?.component;
+     expect(checkboxGroup?.type).toBe(22);
+-    expect(checkboxGroup?.min_values).toBe(2);
+-    expect(checkboxGroup?.max_values).toBe(2);
++    expect(checkboxGroup?.min_values).toBe(SETUP_POLICY_CHOICE_VALUES.length);
++    expect(checkboxGroup?.max_values).toBe(SETUP_POLICY_CHOICE_VALUES.length);
+     expect(checkboxGroup?.required).toBe(true);
+     expect(checkboxGroup?.custom_id).toBe(buildSetupPoliciesModalFieldId("acceptance", nonce));
+     expect(checkboxGroup?.options?.map((option) => option.value)).toEqual([...SETUP_POLICY_CHOICE_VALUES]);
+@@ -1836,7 +1836,7 @@ describe("setupWizardRoutes", () => {
+     expect(textDisplay.content).toContain(buildLegalDocUrl("en-US", "privacy-policy"));
+   });
+ 
+-  it("records policy acceptance and completes the draft only when both documents are accepted", async () => {
++  it("records policy acceptance and completes the draft only when every confirmation is checked", async () => {
+     const nonce = "nonce-policies-both";
+     storeSetupDraft(
+       nonce,
+@@ -1860,7 +1860,11 @@ describe("setupWizardRoutes", () => {
+     // The repaint resolves the stored settings against the catalogs, so this case needs a fixture
+     // rather than whatever the developer's database happens to hold.
+     const catalogs = stubSettingsCatalogs();
+-    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos", "privacy"]);
++    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue([
++      "tos",
++      "privacy",
++      "members",
++    ]);
+ 
+     process.env.RUN_ENV = "production";
+ 
+@@ -1899,7 +1903,11 @@ describe("setupWizardRoutes", () => {
+     process.env.RUN_ENV = "production";
+     storeSetupDraft(nonce, makeDraft({ requiresPolicies: true }));
+ 
+-    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos", "privacy"]);
++    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue([
++      "tos",
++      "privacy",
++      "members",
++    ]);
+     const updateSpy = spyOn(setupDraftStoreModule, "updateSetupDraft").mockReturnValue({ status: "missing" });
+ 
+     try {
+@@ -1923,11 +1931,13 @@ describe("setupWizardRoutes", () => {
+     }
+   });
+ 
+-  it("leaves policies pending and repaints with a notice when only one document is accepted", async () => {
++  // Pinned with both documents accepted so that dropping the member-notice confirmation from
++  // SETUP_POLICY_CHOICE_VALUES fails here rather than silently relaxing the gate.
++  it("leaves policies pending and repaints with a notice when the member notice is unchecked", async () => {
+     const nonce = "nonce-policies-one";
+     storeSetupDraft(nonce, makeDraft({ requiresPolicies: true }));
+ 
+-    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos"]);
++    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos", "privacy"]);
+ 
+     process.env.RUN_ENV = "production";
+ 
+@@ -1994,7 +2004,11 @@ describe("setupWizardRoutes", () => {
+     const draft = makeDraft({ requiresPolicies: false });
+     storeSetupDraft(nonce, draft);
+ 
+-    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos", "privacy"]);
++    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue([
++      "tos",
++      "privacy",
++      "members",
++    ]);
+ 
+     try {
+       const customId = buildSetupPoliciesSubmitRouteId({ locale: "en-US", nonce });
+@@ -2025,7 +2039,11 @@ describe("setupWizardRoutes", () => {
+     storeSetupDraft(nonce, makeDraft({ requiresPolicies: false }));
+ 
+     const modalSpy = spyOn(modalModule, "showRoutedRawModal").mockResolvedValue();
+-    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos", "privacy"]);
++    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue([
++      "tos",
++      "privacy",
++      "members",
++    ]);
+ 
+     try {
+       const opens = [

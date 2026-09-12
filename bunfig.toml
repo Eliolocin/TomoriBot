@@ -7,3 +7,7 @@
 # documents as a manual self-test. A path outside this root must be prefixed with
 # `./` or Bun reads it as a name filter and matches nothing.
 root = "tests"
+
+# Bun reads `.env` before tests, so a production-shaped local config would leak into every
+# suite. See tests/preload.ts.
+preload = ["./tests/preload.ts"]

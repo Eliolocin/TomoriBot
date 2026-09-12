@@ -61,21 +61,23 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
-  const guildDiscId = interaction.guild?.id ?? interaction.user.id;
+  const guildDiscId = interaction.guild?.id;
 
   try {
-    // Permission check: ManageGuild required for destructive server ops
-    if (interaction.guild) {
-      const hasPermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
-      if (!hasPermission) {
-        await replyInfoEmbed(interaction, locale, {
-          titleKey: "commands.data.delete.no_permission_title",
-          descriptionKey: "commands.data.delete.no_permission_description",
-          color: ColorCode.ERROR,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
+    // Fails closed on a missing guild rather than falling back to the invoker's id. There is no
+    // membership to read ManageGuild from outside a guild, and a DM's server key is that same
+    // user id, so a fallback would wipe a record with the permission branch skipped entirely.
+    // `guildOnly` already keeps Discord from delivering this in a DM; this keeps the guarantee
+    // local to the command, where removing that export cannot silently disarm it.
+    const hasPermission = Boolean(guildDiscId) && (interaction.memberPermissions?.has("ManageGuild") ?? false);
+    if (!guildDiscId || !hasPermission) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.data.delete.no_permission_title",
+        descriptionKey: "commands.data.delete.no_permission_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
     }
 
     const confirmation = interaction.options.getString("confirmation", true);

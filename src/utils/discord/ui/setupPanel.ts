@@ -1154,7 +1154,7 @@ export function buildSetupSettingsModal(
 
 export type SetupPoliciesModalField = "acceptance";
 
-export const SETUP_POLICY_CHOICE_VALUES = ["tos", "privacy"] as const;
+export const SETUP_POLICY_CHOICE_VALUES = ["tos", "privacy", "members"] as const;
 
 export function buildSetupPoliciesModalFieldId(field: SetupPoliciesModalField, nonce: string): string {
   return `${field}_${nonce}`;
@@ -1198,6 +1198,10 @@ export function buildSetupPoliciesModal(
             {
               label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.policies_choice_privacy"), 100),
               value: "privacy",
+            },
+            {
+              label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.policies_choice_members"), 100),
+              value: "members",
             },
           ],
         },

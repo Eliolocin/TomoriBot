@@ -1825,8 +1825,8 @@ describe("setupWizardRoutes", () => {
     const wrapper = modal.components.find((component) => component.type === 18);
     const checkboxGroup = wrapper?.component;
     expect(checkboxGroup?.type).toBe(22);
-    expect(checkboxGroup?.min_values).toBe(2);
-    expect(checkboxGroup?.max_values).toBe(2);
+    expect(checkboxGroup?.min_values).toBe(SETUP_POLICY_CHOICE_VALUES.length);
+    expect(checkboxGroup?.max_values).toBe(SETUP_POLICY_CHOICE_VALUES.length);
     expect(checkboxGroup?.required).toBe(true);
     expect(checkboxGroup?.custom_id).toBe(buildSetupPoliciesModalFieldId("acceptance", nonce));
     expect(checkboxGroup?.options?.map((option) => option.value)).toEqual([...SETUP_POLICY_CHOICE_VALUES]);
@@ -1836,7 +1836,7 @@ describe("setupWizardRoutes", () => {
     expect(textDisplay.content).toContain(buildLegalDocUrl("en-US", "privacy-policy"));
   });
 
-  it("records policy acceptance and completes the draft only when both documents are accepted", async () => {
+  it("records policy acceptance and completes the draft only when every confirmation is checked", async () => {
     const nonce = "nonce-policies-both";
     storeSetupDraft(
       nonce,
@@ -1860,7 +1860,11 @@ describe("setupWizardRoutes", () => {
     // The repaint resolves the stored settings against the catalogs, so this case needs a fixture
     // rather than whatever the developer's database happens to hold.
     const catalogs = stubSettingsCatalogs();
-    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos", "privacy"]);
+    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue([
+      "tos",
+      "privacy",
+      "members",
+    ]);
 
     process.env.RUN_ENV = "production";
 
@@ -1899,7 +1903,11 @@ describe("setupWizardRoutes", () => {
     process.env.RUN_ENV = "production";
     storeSetupDraft(nonce, makeDraft({ requiresPolicies: true }));
 
-    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos", "privacy"]);
+    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue([
+      "tos",
+      "privacy",
+      "members",
+    ]);
     const updateSpy = spyOn(setupDraftStoreModule, "updateSetupDraft").mockReturnValue({ status: "missing" });
 
     try {
@@ -1923,11 +1931,13 @@ describe("setupWizardRoutes", () => {
     }
   });
 
-  it("leaves policies pending and repaints with a notice when only one document is accepted", async () => {
+  // Pinned with both documents accepted so that dropping the member-notice confirmation from
+  // SETUP_POLICY_CHOICE_VALUES fails here rather than silently relaxing the gate.
+  it("leaves policies pending and repaints with a notice when the member notice is unchecked", async () => {
     const nonce = "nonce-policies-one";
     storeSetupDraft(nonce, makeDraft({ requiresPolicies: true }));
 
-    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos"]);
+    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos", "privacy"]);
 
     process.env.RUN_ENV = "production";
 
@@ -1994,7 +2004,11 @@ describe("setupWizardRoutes", () => {
     const draft = makeDraft({ requiresPolicies: false });
     storeSetupDraft(nonce, draft);
 
-    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos", "privacy"]);
+    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue([
+      "tos",
+      "privacy",
+      "members",
+    ]);
 
     try {
       const customId = buildSetupPoliciesSubmitRouteId({ locale: "en-US", nonce });
@@ -2025,7 +2039,11 @@ describe("setupWizardRoutes", () => {
     storeSetupDraft(nonce, makeDraft({ requiresPolicies: false }));
 
     const modalSpy = spyOn(modalModule, "showRoutedRawModal").mockResolvedValue();
-    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["tos", "privacy"]);
+    const checkboxSpy = spyOn(modalModule, "takeRawModalCheckboxGroupValues").mockReturnValue([
+      "tos",
+      "privacy",
+      "members",
+    ]);
 
     try {
       const opens = [

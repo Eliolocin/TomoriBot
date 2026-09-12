@@ -15,7 +15,7 @@
     },
     legal: {
       policy_reference: `View the active Terms of Service and Privacy Policy anytime with \`/legal terms-of-service\` and \`/legal privacy-policy\`.`,
-      setup_agreement: `Setting up TomoriBot means that you and your server members agree to its \`/legal terms-of-service\` and \`/legal privacy-policy\` notices`,
+      setup_agreement: `Setting up TomoriBot means you accept its \`/legal terms-of-service\` and \`/legal privacy-policy\`, and that you will let your server members know how TomoriBot handles their messages`,
       provider_policy_reference: `For full details, see \`/legal privacy-policy\` and \`/legal terms-of-service\``,
       data_handling_reference: `**Privacy:** See \`/legal privacy-policy\` for full data handling details`,
     },
@@ -100,7 +100,7 @@
       channel_not_supported_title: `Unsupported Channel Type`,
       channel_not_supported_description: `Sorry, I can only work in server text channels or Direct Messages. Group DMs and other channel types are not supported.`,
       tomori_not_setup_title: `Initial Setup Required`,
-      tomori_not_setup_description: `This server still needs initial setup. A member with **Manage Server** permission should run \`/setup\` first. Open \`/help\` to **Setup**, then **Step 1: Get an API Key**, or read https://docs.tomoribot.app/en/introduction/quickstart/ for the short guide.`,
+      tomori_not_setup_description: `This server still needs initial setup. A member with **Manage Server** permission should run \`/setup\` first. Open \`/help\` to **Setup** for assistance, or read the official [short guide](https://docs.tomoribot.app/en/introduction/quickstart/).`,
       tomori_updating_title: `Currently Updating...`,
       tomori_updating_description: `I'm currently being updated and will be back shortly. Please try again in a few moments!`,
       tomori_not_setup_dm_footer: `DMs use a private setup, so most server-style settings still apply.`,
@@ -200,9 +200,7 @@
       rejoin_title: `I'm Back!`,
       rejoin_description: `Looks like I was re-added to this server. Existing settings and personas are still intact. Use \`/config\`, \`/persona\`, \`/memories\`, and \`/providers\` to review or change them.{legalNotice}`,
       setup_prompt_title: `Successfully Added`,
-      setup_prompt_description: `Thanks for adding me. To start, someone with **Manage Server** permission should run \`/setup\` to choose the initial persona and provider. Open \`/help\` to **Setup**, then **Step 1: Get an API Key**, or read the official [short guide](https://docs.tomoribot.app/en/introduction/quickstart/).
-
-Provider key instructions are built into **Step 1: Get an API Key**.{legalNotice}`,
+      setup_prompt_description: `To start, someone with **Manage Server** permission should run \`/setup\` to choose the initial persona and provider. Open \`/help\` to **Setup** for assistance, or read the official [short guide](https://docs.tomoribot.app/en/introduction/quickstart/).{legalNotice}`,
     },
   },
   reminders: {

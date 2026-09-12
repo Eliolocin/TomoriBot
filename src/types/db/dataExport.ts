@@ -14,8 +14,7 @@ export const EXPORT_VERSION = "1.0";
 export const EXPORT_V2_VERSION = "2.0";
 
 /**
- * Explicit file type identifiers for /data export and /data import.
- * These map directly to user-facing export/delete choices.
+ * Explicit file type identifiers for /export and /import.
  */
 const DATA_EXPORT_TYPES = {
   personal_memories: "personal_memories",

@@ -1395,6 +1395,56 @@ class UserRepository implements IRepository<UserExportShape> {
     }
   }
 
+  /**
+   * Erases a user's own record, cascading every personal table.
+   *
+   * `users` is the cascade root for the personal tables (memories, personalization config,
+   * persona naming preferences, spotlights, saved provider configs, custom endpoint connections,
+   * scoped model registrations, conditioning history, stat counters). The four remaining
+   * references are ON DELETE SET NULL, so server memories, reminders, uploaded documents, and
+   * error logs survive with the authorship link severed rather than deleting content a server
+   * owns. The Privacy Policy describes exactly this split.
+   *
+   * Spotlight server ids are read inside the same transaction before the delete because the
+   * cascade destroys the rows that post-commit cache invalidation needs to target.
+   */
+  async nukeUser(userId: number): Promise<PersonalNukeResult | null> {
+    try {
+      return await sql.begin(async (tx: SQL) => {
+        // Read the Discord id before the cascade: reminders key their target by that string, not
+        // by user_id, so it is unreachable once the row is gone.
+        const [user] = await tx<Array<{ user_disc_id: string }>>`
+          SELECT user_disc_id FROM users WHERE user_id = ${userId}
+        `;
+        if (!user) return null;
+
+        const spotlights = await tx<Array<{ server_id: number }>>`
+          SELECT DISTINCT server_id FROM personal_spotlights WHERE user_id = ${userId}
+        `;
+
+        // Reminders are ON DELETE SET NULL, so the cascade alone would leave both halves behind:
+        // one the user authored (their own prose and schedule, firing forever with a null creator
+        // nobody can claim) and one aimed at them (their Discord id and nickname, held by a row
+        // somebody else created). An erasure has to reach both.
+        const reminders = await tx`
+          DELETE FROM reminders
+          WHERE created_by_user_id = ${userId} OR user_discord_id = ${user.user_disc_id}
+        `;
+
+        await tx`DELETE FROM users WHERE user_id = ${userId}`;
+
+        return {
+          userDiscId: user.user_disc_id,
+          affectedServerIds: spotlights.map((row) => row.server_id),
+          remindersDeleted: reminders.count ?? 0,
+        };
+      });
+    } catch (error) {
+      log.error(`[PersonalNuke] Failed to erase user ${userId}`, error);
+      throw error;
+    }
+  }
+
   private pushUnsafeUpdateValue(field: string, rawValue: unknown, setParts: string[], values: SqlParameterArray): void {
     const placeholder = `$${values.length + 1}`;
     if (Array.isArray(rawValue)) {
@@ -1411,6 +1461,13 @@ class UserRepository implements IRepository<UserExportShape> {
     const escaped = values.map((value) => `"${String(value).replace(/(["\\])/g, "\\$1")}"`);
     return `{${escaped.join(",")}}`;
   }
+}
+
+/** Outcome of a successful personal erasure, carrying the keys post-commit invalidation needs. */
+export interface PersonalNukeResult {
+  userDiscId: string;
+  affectedServerIds: number[];
+  remindersDeleted: number;
 }
 
 /** Singleton instance: import this in callers. */

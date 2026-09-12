@@ -102,16 +102,22 @@ Try {model_text_command} to assign a working model, or {provider_add_command} to
       policies_name: `Policies`,
       policies_description: `Review and accept the Terms of Service and Privacy Policy.`,
       policies_pending: `Not yet reviewed.`,
-      policies_completed: `Terms of Service and Privacy Policy accepted.`,
+      policies_completed: `Policies reviewed and accepted.`,
       policies_button_start: `Review & Accept Policies`,
       policies_button_edit: `Review Policies`,
       policies_modal_title: `Policies`,
-      policies_modal_context: `Review the active policies for this hosted instance.`,
-      policies_modal_acceptance: `By continuing you confirm that you have read and accept the [Terms of Service]({terms_url}) and [Privacy Policy]({privacy_url}) for this setup.`,
-      policies_modal_choice_label: `Accept both to continue`,
-      policies_choice_terms: `I accept the Terms of Service`,
-      policies_choice_privacy: `I accept the Privacy Policy`,
-      policies_required: `Accept both policies to continue.`,
+      policies_modal_context: `Please review TomoriBot's policies before finishing setup.
+
+When TomoriBot is triggered it sends recent messages from
+that channel to this server's AI provider. Providers and
+custom endpoints have their own terms and privacy
+practices, so please review those separately.`,
+      policies_modal_acceptance: `By continuing you confirm that you have read and accept TomoriBot's [Terms of Service]({terms_url}) and [Privacy Policy]({privacy_url}), and that you will make this information available to your server members.`,
+      policies_modal_choice_label: `Confirm all three to continue`,
+      policies_choice_terms: `I accept TomoriBot's Terms of Service`,
+      policies_choice_privacy: `I have read TomoriBot's Privacy Policy`,
+      policies_choice_members: `I'll let my server members know`,
+      policies_required: `Confirm all three items to continue.`,
       policies_denied: `Policy acceptance is not part of this setup.`,
       provider_name: `AI Provider`,
       provider_description: `Choose how replies will access an AI model.`,

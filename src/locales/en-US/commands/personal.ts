@@ -4,6 +4,24 @@ export default {
     providers: {
       description: `Manage your personal provider credentials, endpoints, and model catalogs.`,
     },
+    nuke: {
+      description: `Erase everything TomoriBot stores about you, in every server.`,
+      confirmation_description: `Confirm you want to permanently erase your personal data. This cannot be undone.`,
+      confirmation_choice_yes: `Yes, erase my data`,
+      confirmation_choice_no: `No, cancel`,
+      cancelled_title: `Erasure Cancelled`,
+      cancelled_description: `Nothing was changed. Your data is untouched.`,
+      no_data_title: `Nothing to Erase`,
+      no_data_description: `TomoriBot has no stored record for you.`,
+      success_title: `Personal Data Erased`,
+      success_description: `Erased in every server: personal memories, your personalization settings and naming preferences, spotlights, your saved provider keys, personal endpoints and registered models, your usage statistics, and **{reminders_deleted}** reminder(s) you created or that were set for you.
+
+Persona conditioning you contributed through \`/reward\` and \`/punish\` was also removed, so affected personas may behave differently for everyone in those servers.
+
+Server memories you taught and documents you uploaded belong to their servers and were kept, with your authorship removed. Use \`/memories\` to remove any that describe you. Opt-outs you set stay in place.
+
+TomoriBot will treat you as a new user from your next message.`,
+    },
     memories: {
       description: `Manage your personal long-term memories and short-term conversational context.`,
       outdated_panel: `This panel is outdated. Use {command} to open a fresh panel.`,
