@@ -20,6 +20,8 @@ TomoriBot treats speech as a custom endpoint capability. Local engines run outsi
     description="Multilingual local TTS with clone and VoiceDesign modes. Largest but best quality." />
   <LinkCard title="IrodoriTTS" href="/self-hosting/local-endpoints/text-to-speech/irodoritts/"
     description="Japanese-focused voice cloning that preserves Unicode emoji markup for emotion control." />
+  <LinkCard title="CosyVoice 3" href="/self-hosting/local-endpoints/text-to-speech/cosyvoice3/"
+    description="0.5B multilingual zero-shot cloning with cross-lingual speech, natural-language delivery control, and an upstream streaming runtime." />
 </CardGrid>
 
 ## Setup Flow
@@ -46,17 +48,15 @@ TomoriBot strips Discord custom emoji syntax such as `:pepega:` or `<:pepega:123
 
 ## Hardware requirements
 
-Local TTS engines are **much lighter than an LLM** — these are small models (roughly
-0.5B–1.7B parameters). Even a modest NVIDIA GPU (a few GB of VRAM is plenty) runs any of them
-comfortably and keeps synthesis fast. They also run on **CPU** — slower, but workable, since
-voice clips are short.
+Local TTS is generally lighter than running a large local LLM, but the exact runtime matters. A modern NVIDIA GPU is the recommended path when low latency matters; CPU fallback is slower.
 
 | Engine | Model size | Notes |
 |---|---|---|
 | Chatterbox | ~0.5B (Turbo) | Fastest current option. |
 | Qwen3-TTS | 1.7B (12 Hz) | Separate clone + VoiceDesign models; only one loads at a time. |
 | IrodoriTTS | 500M (v2) | Japanese-focused; `bf16` on GPU, `fp32` on CPU. |
+| CosyVoice 3 | 0.5B | Unquantized default; 16 GB VRAM is a comfortable target, with upstream audio streaming retained inside the wrapper. |
 
-The first synthesis after startup (or after Qwen3-TTS swaps models in auto mode) is slower
-while the model loads into memory; later requests are fast. TomoriBot waits up to
-`TTS_SYNTHESIZE_TIMEOUT_MS` (default 240000 ms) for each response.
+CosyVoice 3's current model download is larger than its 0.5B LLM size because the package also includes the flow model, speech tokenizers, English text model, and both base and RL LLM weights. See its guide for disk-space, CUDA, and Windows/WSL details.
+
+The first synthesis after startup (or after Qwen3-TTS swaps models in auto mode) is slower while the model loads into memory; later requests are fast. TomoriBot waits up to `TTS_SYNTHESIZE_TIMEOUT_MS` (default 240000 ms) for each response.
