@@ -60,7 +60,7 @@ export interface VoiceMessageSynthesisRequest {
   elevenLabsApiKey: string;
   source: ResolvedVoiceSource;
   script: string;
-  /** Per-message delivery direction, design-shaped sources only. */
+  /** Per-message delivery direction for design-shaped or instruction-capable clone sources. */
   voiceInstructions?: string;
   /** Chatterbox delivery overrides for this invocation, clone sources only. */
   chatterbox?: {
@@ -155,6 +155,7 @@ export async function synthesizeVoiceMessage(
             voiceSampleId: source.voiceSampleId,
             script,
             apiKey: endpointApiKey,
+            ...(request.voiceInstructions ? { voiceInstructions: request.voiceInstructions } : {}),
             ...(chatterbox ? { chatterbox } : {}),
           })
         : await synthesizeSpeechViaTtsCloneBuffer({
@@ -163,6 +164,7 @@ export async function synthesizeVoiceMessage(
             refText: source.refText,
             script,
             apiKey: endpointApiKey,
+            ...(request.voiceInstructions ? { voiceInstructions: request.voiceInstructions } : {}),
             ...(chatterbox ? { chatterbox } : {}),
           });
 

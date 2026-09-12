@@ -14,6 +14,8 @@ export interface VoiceSourceCapabilities {
   acceptsCloneShape: boolean;
   /** Endpoint accepts design-shaped bodies (`instruct`). */
   acceptsDesignShape: boolean;
+  /** Clone-shaped bodies may carry a one-off delivery instruction in `instruct`. */
+  cloneInstructionsAvailable: boolean;
 }
 
 function getVoiceMode(endpoint: CustomEndpointRow | null | undefined): "clone" | "voice-design" | "auto" {
@@ -32,12 +34,15 @@ export function resolveVoiceSourceCapabilities(
   endpoint: CustomEndpointRow | null | undefined,
 ): VoiceSourceCapabilities {
   if (endpoint?.api_style !== "tts-clone") {
-    return { acceptsCloneShape: false, acceptsDesignShape: false };
+    return { acceptsCloneShape: false, acceptsDesignShape: false, cloneInstructionsAvailable: false };
   }
 
   const mode = getVoiceMode(endpoint);
+  const acceptsCloneShape = mode === "clone" || mode === "auto";
+  const acceptsDesignShape = mode === "voice-design" || mode === "auto";
   return {
-    acceptsCloneShape: mode === "clone" || mode === "auto",
-    acceptsDesignShape: mode === "voice-design" || mode === "auto",
+    acceptsCloneShape,
+    acceptsDesignShape,
+    cloneInstructionsAvailable: acceptsCloneShape && endpoint.extra_config.supports_instruct === true,
   };
 }

@@ -18,12 +18,16 @@ import {
 
 type VoiceMode = "clone" | "voice-design" | "auto";
 
-function makeEndpoint(apiStyle: CustomEndpointRow["api_style"], voiceMode?: VoiceMode): CustomEndpointRow {
+function makeEndpoint(
+  apiStyle: CustomEndpointRow["api_style"],
+  voiceMode?: VoiceMode,
+  supportsInstruct = false,
+): CustomEndpointRow {
   return {
     label: "Test Speech",
     api_style: apiStyle,
     endpoint_url: "https://speech.example.test",
-    extra_config: voiceMode ? { voice_mode: voiceMode } : {},
+    extra_config: { ...(voiceMode ? { voice_mode: voiceMode } : {}), supports_instruct: supportsInstruct },
   } as unknown as CustomEndpointRow;
 }
 
@@ -46,27 +50,43 @@ function ids(candidates: readonly VoiceSourceCandidate[]): string[] {
 
 describe("resolveVoiceSourceCapabilities", () => {
   it("treats a missing endpoint as accepting neither shape", () => {
-    expect(resolveVoiceSourceCapabilities(null)).toEqual({ acceptsCloneShape: false, acceptsDesignShape: false });
+    expect(resolveVoiceSourceCapabilities(null)).toEqual({
+      acceptsCloneShape: false,
+      acceptsDesignShape: false,
+      cloneInstructionsAvailable: false,
+    });
   });
 
   it("defaults an unset voice_mode to clone", () => {
     expect(resolveVoiceSourceCapabilities(makeEndpoint("tts-clone"))).toEqual({
       acceptsCloneShape: true,
       acceptsDesignShape: false,
+      cloneInstructionsAvailable: false,
     });
   });
 
   it("gives auto both shapes", () => {
-    expect(resolveVoiceSourceCapabilities(makeEndpoint("tts-clone", "auto"))).toEqual({
+    expect(resolveVoiceSourceCapabilities(makeEndpoint("tts-clone", "auto", true))).toEqual({
       acceptsCloneShape: true,
       acceptsDesignShape: true,
+      cloneInstructionsAvailable: true,
     });
+  });
+
+  it("only enables clone delivery direction when the endpoint opts into it", () => {
+    expect(resolveVoiceSourceCapabilities(makeEndpoint("tts-clone", "clone", true)).cloneInstructionsAvailable).toBe(
+      true,
+    );
+    expect(resolveVoiceSourceCapabilities(makeEndpoint("tts-clone", "clone", false)).cloneInstructionsAvailable).toBe(
+      false,
+    );
   });
 
   it("gives voice-design endpoints only the design shape", () => {
     expect(resolveVoiceSourceCapabilities(makeEndpoint("tts-clone", "voice-design"))).toEqual({
       acceptsCloneShape: false,
       acceptsDesignShape: true,
+      cloneInstructionsAvailable: false,
     });
   });
 
@@ -74,6 +94,7 @@ describe("resolveVoiceSourceCapabilities", () => {
     expect(resolveVoiceSourceCapabilities(makeEndpoint("elevenlabs"))).toEqual({
       acceptsCloneShape: false,
       acceptsDesignShape: false,
+      cloneInstructionsAvailable: false,
     });
   });
 });

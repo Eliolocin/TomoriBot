@@ -89,6 +89,7 @@ function makeEndpoint(options: {
   apiStyle?: CustomEndpointRow["api_style"];
   voiceMode?: VoiceMode;
   scriptMarkup?: string;
+  supportsInstruct?: boolean;
 }): CustomEndpointRow {
   return {
     label: "Speech",
@@ -97,6 +98,7 @@ function makeEndpoint(options: {
     extra_config: {
       ...(options.voiceMode ? { voice_mode: options.voiceMode } : {}),
       ...(options.scriptMarkup ? { script_markup: options.scriptMarkup } : {}),
+      ...(options.supportsInstruct !== undefined ? { supports_instruct: options.supportsInstruct } : {}),
     },
   } as unknown as CustomEndpointRow;
 }
@@ -218,6 +220,26 @@ describe("synthesizeVoiceMessage clone sources", () => {
     expect(cloneRequests[0]).toMatchObject({ refText: "reference words" });
   });
 
+  it("forwards clone delivery direction to the clone adapter", async () => {
+    const { calls } = await dispatch(makeEndpoint({ voiceMode: "clone", supportsInstruct: true }), CLONE_SOURCE, {
+      voiceInstructions: "sound calm and close",
+    });
+
+    expect(calls).toEqual(["clone"]);
+    expect(cloneRequests[0]).toMatchObject({ voiceInstructions: "sound calm and close" });
+  });
+
+  it("forwards clone delivery direction for ad-hoc uploads", async () => {
+    const { calls } = await dispatch(
+      makeEndpoint({ voiceMode: "clone", supportsInstruct: true }),
+      CLONE_BUFFER_SOURCE,
+      { voiceInstructions: "speak softly" },
+    );
+
+    expect(calls).toEqual(["clone-buffer"]);
+    expect(cloneRequests[0]).toMatchObject({ voiceInstructions: "speak softly" });
+  });
+
   it("refuses a clone source on a voice-design-only endpoint without reaching a backend", async () => {
     // Still `api_style === "tts-clone"`, so an api_style-only guard would post a clone-shaped body
     // to an instruct-only server.
@@ -289,6 +311,7 @@ describe("design-shape capability", () => {
       expect(resolveVoiceSourceCapabilities(endpoint)).toEqual({
         acceptsCloneShape: false,
         acceptsDesignShape: false,
+        cloneInstructionsAvailable: false,
       });
     }
   });
