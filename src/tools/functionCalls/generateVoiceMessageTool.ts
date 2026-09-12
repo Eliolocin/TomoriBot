@@ -85,8 +85,13 @@ export const VOICE_TOOL_VARIANTS = {
 
 export type VoiceScriptMarkup = keyof typeof VOICE_TOOL_VARIANTS;
 
-export function buildVoiceMessageToolVariant(tool: Tool, scriptMarkup: VoiceScriptMarkup): Tool {
+export function buildVoiceMessageToolVariant(
+  tool: Tool,
+  scriptMarkup: VoiceScriptMarkup,
+  options: { voiceInstructionsAvailable?: boolean } = {},
+): Tool {
   const variant = VOICE_TOOL_VARIANTS[scriptMarkup] ?? VOICE_TOOL_VARIANTS["bracket-tags"];
+  const voiceInstructionsAvailable = options.voiceInstructionsAvailable ?? scriptMarkup === "voice-design";
   const parameters: ToolParameterSchema = {
     ...tool.parameters,
     properties: {
@@ -95,7 +100,7 @@ export function buildVoiceMessageToolVariant(tool: Tool, scriptMarkup: VoiceScri
         ...tool.parameters.properties.script,
         description: variant.scriptDescription,
       },
-      ...(scriptMarkup === "voice-design"
+      ...(voiceInstructionsAvailable
         ? {
             voice_instructions: {
               type: "string" as const,
@@ -143,13 +148,18 @@ export class GenerateVoiceMessageTool extends BaseTool {
       context.state.activePersonaVoiceDesignPrompt,
       context.state.activePersonaVoiceName,
     );
+    const cloneInstructionsAvailable = resolveVoiceSourceCapabilities(
+      activeSpeechEndpoint?.endpoint,
+    ).cloneInstructionsAvailable;
     const variant = voiceDesign
       ? "voice-design"
       : scriptMarkup in VOICE_TOOL_VARIANTS
         ? (scriptMarkup as VoiceScriptMarkup)
         : "bracket-tags";
 
-    return buildVoiceMessageToolVariant(this, variant);
+    return buildVoiceMessageToolVariant(this, variant, {
+      voiceInstructionsAvailable: voiceDesign || cloneInstructionsAvailable,
+    });
   }
 
   private resolveThreadId(context: ToolContext): string | undefined {
