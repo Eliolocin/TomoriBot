@@ -9,7 +9,7 @@ config();
 
 // scripts/devtools/launch.ts
 //
-//   bun run launch [--searxng] [--crawl4ai] [--qwen3tts] [--chatterbox] [--irodoritts]
+//   bun run launch [--searxng] [--crawl4ai] [--qwen3tts] [--chatterbox] [--irodoritts] [--fishs2]
 //
 //   Starts requested sidecar services, waits for them to be ready, then
 //   launches the bot in watch mode (equivalent to `bun run dev`).
@@ -21,7 +21,6 @@ config();
 //   Press Ctrl+C to stop everything.
 
 const ROOT = process.cwd();
-
 
 const argv = process.argv.slice(2);
 const flags = new Set(argv.filter((a) => a.startsWith("--")).map((a) => a.slice(2)));
@@ -39,6 +38,7 @@ ${pc.bold("Options:")}
   --qwen3tts    Start the Qwen3-TTS Python server (requires venv setup)
   --chatterbox  Start the Chatterbox TTS Python server (requires venv setup)
   --irodoritts  Start the IrodoriTTS Python server (requires venv setup)
+  --fishs2      Start the Fish Audio S2 Pro Python server (requires venv + model setup)
   --whisperx    Start the WhisperX transcription Python server (requires venv setup)
   --help        Show this message
 
@@ -46,10 +46,10 @@ ${pc.bold("Examples:")}
   bun run launch
   bun run launch --searxng --crawl4ai
   bun run launch --qwen3tts --searxng
+  bun run launch --fishs2
 `);
   process.exit(0);
 }
-
 
 interface DockerSidecar {
   kind: "docker";
@@ -152,6 +152,14 @@ const SIDECARS: Record<string, SidecarDef> = {
     startupDelayMs: 8_000,
   },
 
+  fishs2: {
+    kind: "python",
+    displayName: "Fish S2 Pro",
+    venvRelPath: "servers/tts/fishs2/.venv",
+    scriptRelPath: "servers/tts/fishs2/server.py",
+    startupDelayMs: 12_000,
+  },
+
   whisperx: {
     kind: "python",
     displayName: "WhisperX",
@@ -160,7 +168,6 @@ const SIDECARS: Record<string, SidecarDef> = {
     startupDelayMs: 10_000,
   },
 };
-
 
 /**
  * Checks whether a named Docker container exists (regardless of state).
@@ -256,7 +263,6 @@ async function ensureDockerSidecar(def: DockerSidecar): Promise<void> {
   console.log(`${label} ${pc.green("Healthy ✓")}`);
 }
 
-
 /**
  * Spawns a Python sidecar server from its pre-built venv and waits
  * `startupDelayMs` milliseconds for it to bind before returning the handle.
@@ -290,7 +296,6 @@ async function startPythonSidecar(def: PythonSidecar): Promise<ReturnType<typeof
 
   return proc;
 }
-
 
 async function main(): Promise<void> {
   const requested = [...flags].filter((f) => f in SIDECARS);
