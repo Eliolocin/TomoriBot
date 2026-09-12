@@ -204,7 +204,10 @@ function removalEntryId(route: { entryKind: "provider" | "endpoint" | "brave"; e
   return route.entryKind === "brave" ? "brave" : `${route.entryKind}:${route.entryKey}`;
 }
 
-function addReceipt(locale: string, result: AddServerProviderResult): PanelReceipt {
+/** Derived from the resolver rather than restated, so a registry change cannot leave this behind. */
+type ProviderPanelScopeKind = Parameters<typeof resolveProviderPanelAction>[0];
+
+function addReceipt(locale: string, result: AddServerProviderResult, scopeKind: ProviderPanelScopeKind): PanelReceipt {
   if (result.status === "success") {
     return {
       tone: "success",
@@ -232,10 +235,15 @@ function addReceipt(locale: string, result: AddServerProviderResult): PanelRecei
     // The operation status is already the machine-readable cause, so the metric key can name it
     // exactly instead of falling back to the route namespace.
     reason: `provider_add_${result.status}`,
+    action: resolveProviderPanelAction(scopeKind, "provider.add"),
   };
 }
 
-function addEndpointReceipt(locale: string, result: AddCustomEndpointConnectionResult): PanelReceipt {
+function addEndpointReceipt(
+  locale: string,
+  result: AddCustomEndpointConnectionResult,
+  scopeKind: ProviderPanelScopeKind,
+): PanelReceipt {
   if (result.status === "success") {
     return {
       tone: "success",
@@ -251,6 +259,7 @@ function addEndpointReceipt(locale: string, result: AddCustomEndpointConnectionR
         reason: escapeDiscordMarkdown(result.reason.replace(/\s+/g, " ").trim().slice(0, 300)),
       }),
       reason: "endpoint_add_unreachable",
+      action: resolveProviderPanelAction(scopeKind, "endpoint.add"),
     };
   }
   const keys: Record<Exclude<AddCustomEndpointConnectionResult["status"], "success" | "unreachable">, string> = {
@@ -265,10 +274,15 @@ function addEndpointReceipt(locale: string, result: AddCustomEndpointConnectionR
     heading: localizer(locale, "commands.providers.add_endpoint_failed"),
     detail: localizer(locale, keys[result.status]),
     reason: `endpoint_add_${result.status}`,
+    action: resolveProviderPanelAction(scopeKind, "endpoint.add"),
   };
 }
 
-function modelReceipt(locale: string, result: SaveProviderModelResult): PanelReceipt {
+function modelReceipt(
+  locale: string,
+  result: SaveProviderModelResult,
+  scopeKind: ProviderPanelScopeKind,
+): PanelReceipt {
   if (result.status === "success") {
     return {
       tone: "success",
@@ -290,10 +304,15 @@ function modelReceipt(locale: string, result: SaveProviderModelResult): PanelRec
     heading: localizer(locale, "commands.providers.model_save_failed"),
     detail: localizer(locale, keys[result.status]),
     reason: `model_save_${result.status}`,
+    action: resolveProviderPanelAction(scopeKind, "model.save"),
   };
 }
 
-function providerEditReceipt(locale: string, result: EditProviderResult): PanelReceipt {
+function providerEditReceipt(
+  locale: string,
+  result: EditProviderResult,
+  scopeKind: ProviderPanelScopeKind,
+): PanelReceipt {
   if (result.status === "success") {
     return {
       tone: "success",
@@ -322,10 +341,15 @@ function providerEditReceipt(locale: string, result: EditProviderResult): PanelR
     heading: localizer(locale, "commands.providers.change_failed"),
     detail: localizer(locale, keys[result.status]),
     reason: `provider_edit_${result.status}`,
+    action: resolveProviderPanelAction(scopeKind, "provider.edit"),
   };
 }
 
-function endpointEditReceipt(locale: string, result: EditEndpointResult): PanelReceipt {
+function endpointEditReceipt(
+  locale: string,
+  result: EditEndpointResult,
+  scopeKind: ProviderPanelScopeKind,
+): PanelReceipt {
   if (result.status === "success") {
     return {
       tone: "success",
@@ -348,6 +372,7 @@ function endpointEditReceipt(locale: string, result: EditEndpointResult): PanelR
         reason: escapeDiscordMarkdown(result.reason.replace(/\s+/g, " ").trim().slice(0, 300)),
       }),
       reason: "endpoint_edit_unreachable",
+      action: resolveProviderPanelAction(scopeKind, "endpoint.edit"),
     };
   }
   const keys: Record<Exclude<EditEndpointResult["status"], "success" | "unchanged" | "unreachable">, string> = {
@@ -360,6 +385,7 @@ function endpointEditReceipt(locale: string, result: EditEndpointResult): PanelR
     heading: localizer(locale, "commands.providers.change_failed"),
     detail: localizer(locale, keys[result.status]),
     reason: `endpoint_edit_${result.status}`,
+    action: resolveProviderPanelAction(scopeKind, "endpoint.edit"),
   };
 }
 
@@ -807,7 +833,7 @@ export function createProvidersInteractionRoute(
           nextScope,
           action.result.status === "success" ? { kind: "entry", entryId: action.result.entryId } : { kind: "entry" },
           action.result.status === "success" ? rangeForEntry(nextScope, action.result.entryId) : 0,
-          addReceipt(route.locale, action.result),
+          addReceipt(route.locale, action.result, scope.scopeKind),
         );
         return;
       }
@@ -900,7 +926,7 @@ export function createProvidersInteractionRoute(
           nextScope,
           action.result.status === "success" ? { kind: "entry", entryId: action.result.entryId } : { kind: "entry" },
           action.result.status === "success" ? rangeForEntry(nextScope, action.result.entryId) : 0,
-          addEndpointReceipt(route.locale, action.result),
+          addEndpointReceipt(route.locale, action.result, scope.scopeKind),
         );
         return;
       }
@@ -942,7 +968,7 @@ export function createProvidersInteractionRoute(
           nextScope,
           { kind: "entry", entryId },
           rangeForEntry(nextScope, entryId),
-          providerEditReceipt(route.locale, action.result),
+          providerEditReceipt(route.locale, action.result, scope.scopeKind),
         );
         return;
       }
@@ -986,7 +1012,7 @@ export function createProvidersInteractionRoute(
           nextScope,
           { kind: "entry", entryId },
           rangeForEntry(nextScope, entryId),
-          endpointEditReceipt(route.locale, action.result),
+          endpointEditReceipt(route.locale, action.result, scope.scopeKind),
         );
         return;
       }
@@ -1065,7 +1091,7 @@ export function createProvidersInteractionRoute(
           nextScope,
           { kind: "entry", entryId },
           rangeForEntry(nextScope, entryId),
-          modelReceipt(route.locale, action.result),
+          modelReceipt(route.locale, action.result, scope.scopeKind),
         );
         return;
       }

@@ -354,3 +354,44 @@ describe("setup wizard terminal notice receipts", () => {
     }
   });
 });
+
+describe("panel action correlation key", () => {
+  it("emits the action in the stat_counters key space when the receipt names one", async () => {
+    const { metrics, restore } = captureMetrics();
+    try {
+      await deliverGuardedPanel(fakeInteraction("moderation:v1:page:en-US"), validPayload(), {
+        locale: "en-US",
+        receipt: {
+          tone: "error",
+          heading: "Removal Failed",
+          detail: "Nothing was removed.",
+          reason: "whitelist_channel_remove_total",
+          action: "moderation.workspace.whitelist-channel.remove",
+        },
+      });
+
+      // Identical to the key `recordPanelActionStat` writes on success, so
+      // `stat_counters.metric_key = fields->>'action'` joins failures to the successes of the same
+      // control rather than only to its surface.
+      expect(metrics[0]?.fields.action).toBe("moderation.workspace.whitelist-channel.remove");
+    } finally {
+      restore();
+    }
+  });
+
+  it("omits the field entirely when the receipt names no action", async () => {
+    const { metrics, restore } = captureMetrics();
+    try {
+      await deliverGuardedPanel(fakeInteraction("config:v1:page:en-US:models"), validPayload(), {
+        locale: "en-US",
+        receipt: ERROR_RECEIPT,
+      });
+
+      // Absent rather than empty: a placeholder would join to no counter while looking as though
+      // it had.
+      expect(metrics[0]?.fields).not.toHaveProperty("action");
+    } finally {
+      restore();
+    }
+  });
+});

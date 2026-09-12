@@ -1415,6 +1415,7 @@ export function createModerationInteractionRoute(
               heading: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed"),
               detail: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed_detail"),
               reason: channelRemovalReason,
+              action: "moderation.workspace.whitelist-channel.remove",
             }
           : ids.length === 0
             ? {
@@ -1594,6 +1595,7 @@ export function createModerationInteractionRoute(
             heading: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed"),
             detail: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed_detail"),
             reason: "whitelist_channel_remove_failed",
+            action: "moderation.workspace.whitelist-channel.remove",
           };
         }
 
@@ -1867,6 +1869,7 @@ export function createModerationInteractionRoute(
               heading: localizer(route.locale, "commands.moderation.whitelist_role_remove_failed"),
               detail: localizer(route.locale, "commands.moderation.whitelist_role_remove_failed_detail"),
               reason: roleRemovalReason,
+              action: "moderation.workspace.whitelist-role.remove",
             }
           : ids.length === 0
             ? {
@@ -1999,6 +2002,7 @@ export function createModerationInteractionRoute(
                   heading: localizer(route.locale, "commands.moderation.whitelist_role_remove_failed"),
                   detail: localizer(route.locale, "commands.moderation.whitelist_role_remove_failed_detail"),
                   reason: "whitelist_role_remove_failed",
+                  action: "moderation.workspace.whitelist-role.remove",
                 };
 
         const reloadedScope = await dependencies.resolveScope(interaction, false);
@@ -2216,6 +2220,7 @@ export function createModerationInteractionRoute(
               heading: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed"),
               detail: localizer(route.locale, "commands.moderation.whitelist_channel_remove_failed_detail"),
               reason: "persona_channel_remove_failed",
+              action: "moderation.workspace.persona-channel.remove",
             }
           : removed.size === 0
             ? {
@@ -2432,6 +2437,7 @@ export function createModerationInteractionRoute(
             heading: localizer(route.locale, "commands.moderation.quota_edit_failed"),
             detail: localizer(route.locale, "commands.moderation.quota_edit_failed_detail"),
             reason: `quota_edit_${result.status}`,
+            action: "moderation.workspace.quota.set",
           };
         }
 

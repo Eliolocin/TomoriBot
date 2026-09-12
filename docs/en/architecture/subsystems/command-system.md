@@ -119,10 +119,34 @@ content would spend the payload's Discord text budget and could push a receipt l
 prose width limit; passing it as an option keeps the outgoing payload byte-for-byte what the caller
 built.
 
-That makes the failure rows joinable against successes, which live in `stat_counters` as
-`panel_action`. A query joining `stat_counters.metric_key` to `metric_samples.fields->>'reason'`
-answers which controls fail and how often relative to succeeding, without correlating two log streams
-by hand.
+**A receipt that knows its action carries the join key.** Successes live in `stat_counters` as
+`panel_action`, keyed `<surface>.<scope>.<resource>.<verb>`. `reason` does not share that key space,
+so a receipt that knows which control it reports on sets `action` to the same identifier the success
+counter writes, and the metric emits it as an `action` field. The field is omitted rather than
+defaulted when the site does not know it: a placeholder would join to no counter while looking as
+though it had. Moderation and the provider panels set it today; other surfaces fall back to
+`namespace` plus `tone`, which compares surfaces but not individual controls.
+
+Both sides need aggregating before the join. `stat_counters` holds one row per server, user and
+bucket, so joining it directly to `metric_samples` fans the failure count out by the number of
+success rows:
+
+```sql
+WITH successes AS (
+  SELECT metric_key AS action, SUM(count) AS successes
+  FROM stat_counters WHERE metric = 'panel_action' GROUP BY 1
+), failures AS (
+  SELECT fields->>'action' AS action, COUNT(*) AS failures
+  FROM metric_samples WHERE metric_name = 'panel_failure' AND fields ? 'action' GROUP BY 1
+)
+SELECT COALESCE(s.action, f.action) AS action, COALESCE(s.successes, 0), COALESCE(f.failures, 0)
+FROM successes s FULL JOIN failures f USING (action);
+```
+
+Under `bun test` the default sink resolves to an inert one. Otherwise a suite that merely renders
+failure panels inserts a row per emission into whatever database the environment points at, which
+put hundreds of rows of test data into a live `metric_samples`. A test asserting on the sink installs
+its own through `setPanelFailureSampleSink`, which takes precedence.
 
 Successes have their own blind spot, closed the same way. `recordPanelActionStat` buffers its counter
 write and cannot observe a later flush failure, so a dead success counter would leave failures

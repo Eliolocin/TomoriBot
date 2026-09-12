@@ -2096,8 +2096,16 @@ export function setPanelFailureSampleSink(sink: PanelFailureSampleSink | null): 
   return previous;
 }
 
+/** Discards the sample, for a context that must not reach a real database. */
+const inertPanelFailureSampleSink: PanelFailureSampleSink = { recordSample: async () => {} };
+
 async function resolvePanelFailureSampleSink(): Promise<PanelFailureSampleSink> {
   if (panelFailureSampleSink) return panelFailureSampleSink;
+  // Under `bun test` the default would resolve the real repository and insert against whatever
+  // database the environment points at, so a suite that merely renders failure panels writes
+  // hundreds of rows of test data into a live `metric_samples`. A test that means to assert on the
+  // sink installs its own through `setPanelFailureSampleSink`, which is checked above.
+  if (process.env.NODE_ENV === "test") return inertPanelFailureSampleSink;
   const { metricSampleRepository } = await import("@/utils/db/repositories/MetricSampleRepository");
   return metricSampleRepository;
 }
@@ -2168,6 +2176,10 @@ function reportPanelFailure(
       reason: receipt.reason ?? `${namespace}_${receipt.tone}`,
       namespace,
       heading: receipt.heading,
+      // Omitted rather than defaulted when the site does not know its action: the field shares the
+      // `stat_counters.panel_action` key space, and a placeholder would join to nothing while
+      // looking like it had.
+      ...(receipt.action ? { action: receipt.action } : {}),
     };
     log.metric("panel_failure", fields);
     recordPanelFailureSample(fields);
