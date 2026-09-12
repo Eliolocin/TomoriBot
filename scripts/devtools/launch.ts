@@ -9,7 +9,7 @@ config();
 
 // scripts/devtools/launch.ts
 //
-//   bun run launch [--searxng] [--crawl4ai] [--qwen3tts] [--chatterbox] [--irodoritts]
+//   bun run launch [--searxng] [--crawl4ai] [--qwen3tts] [--chatterbox] [--irodoritts] [--voxcpm2]
 //
 //   Starts requested sidecar services, waits for them to be ready, then
 //   launches the bot in watch mode (equivalent to `bun run dev`).
@@ -39,6 +39,7 @@ ${pc.bold("Options:")}
   --qwen3tts    Start the Qwen3-TTS Python server (requires venv setup)
   --chatterbox  Start the Chatterbox TTS Python server (requires venv setup)
   --irodoritts  Start the IrodoriTTS Python server (requires venv setup)
+  --voxcpm2     Start the VoxCPM2 Python server (requires venv setup)
   --whisperx    Start the WhisperX transcription Python server (requires venv setup)
   --help        Show this message
 
@@ -46,6 +47,7 @@ ${pc.bold("Examples:")}
   bun run launch
   bun run launch --searxng --crawl4ai
   bun run launch --qwen3tts --searxng
+  bun run launch --voxcpm2
 `);
   process.exit(0);
 }
@@ -150,6 +152,14 @@ const SIDECARS: Record<string, SidecarDef> = {
     venvRelPath: "servers/tts/irodoritts/.venv",
     scriptRelPath: "servers/tts/irodoritts/server.py",
     startupDelayMs: 8_000,
+  },
+
+  voxcpm2: {
+    kind: "python",
+    displayName: "VoxCPM2",
+    venvRelPath: "servers/tts/voxcpm2/.venv",
+    scriptRelPath: "servers/tts/voxcpm2/server.py",
+    startupDelayMs: 15_000,
   },
 
   whisperx: {
@@ -262,7 +272,10 @@ async function ensureDockerSidecar(def: DockerSidecar): Promise<void> {
  * `startupDelayMs` milliseconds for it to bind before returning the handle.
  * Throws if the venv is missing (user must run setup first).
  */
-async function startPythonSidecar(def: PythonSidecar): Promise<ReturnType<typeof Bun.spawn>> {
+async function startPythonSidecar(
+  def: PythonSidecar,
+  flagName: string,
+): Promise<ReturnType<typeof Bun.spawn>> {
   const { displayName, venvRelPath, scriptRelPath, scriptArgs = [], startupDelayMs = 3_000 } = def;
   const label = pc.magenta(`[${displayName}]`);
 
@@ -270,7 +283,7 @@ async function startPythonSidecar(def: PythonSidecar): Promise<ReturnType<typeof
   if (!existsSync(pythonExe)) {
     throw new Error(
       `${displayName} venv not found at "${join(ROOT, venvRelPath)}". ` +
-      `Run the setup instructions in the docs before using --${displayName.toLowerCase().replace(/[^a-z]/g, "")}.`,
+      `Run the setup instructions in the docs before using --${flagName}.`,
     );
   }
 
@@ -308,7 +321,7 @@ async function main(): Promise<void> {
       if (def.kind === "docker") {
         await ensureDockerSidecar(def);
       } else {
-        const proc = await startPythonSidecar(def);
+        const proc = await startPythonSidecar(def, flag);
         childProcesses.push(proc);
       }
     } catch (err) {
