@@ -30,7 +30,7 @@ A self-hosted and customizable personal AI assistant/role-playing system for Dis
   <br />
 
 [![GitHub Stars](https://img.shields.io/github/stars/Bredrumb/TomoriBot.svg)](https://github.com/Bredrumb/TomoriBot/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/Bredrumb/TomoriBot/network/members)
+[![GitHub Forks](https://img.shields.io/github/forks/Bredrumb/TomoriBot.svg)](https://github.com/Bredrumb/TomoriBot/forks)
 [![GitHub Issues](https://img.shields.io/github/issues/Bredrumb/TomoriBot.svg)](https://github.com/Bredrumb/TomoriBot/issues)
 [![GitHub Pull Requests](https://img.shields.io/github/issues-pr/Bredrumb/TomoriBot.svg)](https://github.com/Bredrumb/TomoriBot/pulls)
 [![License](https://img.shields.io/github/license/Bredrumb/TomoriBot.svg)](https://github.com/Bredrumb/TomoriBot/blob/main/LICENSE)
@@ -241,7 +241,7 @@ bun run update
 The command runs this sequence, stopping immediately if any step fails:
 
 1. **`bun run backup`** - takes a full database backup into `/backups/` *before* touching any code. If the backup fails, the update aborts with your deployment completely unchanged.
-2. **`git pull --rebase --autostash`
+2. **`git pull --rebase --autostash`**
 3. **`bun install --frozen-lockfile`**
 
 Then restart TomoriBot with `bun run dev` or `bun run launch`
