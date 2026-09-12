@@ -30,6 +30,10 @@ if [[ ! -d "${RUNTIME_DIR}/.git" ]]; then
   git -C "${RUNTIME_DIR}" fetch --no-tags origin "${RUNTIME_COMMIT}"
   git -C "${RUNTIME_DIR}" checkout --detach "${RUNTIME_COMMIT}"
 else
+  if [[ -n "$(git -C "${RUNTIME_DIR}" status --porcelain)" ]]; then
+    echo "CosyVoice runtime has local changes. Clean it before reinstalling." >&2
+    exit 1
+  fi
   CURRENT_COMMIT="$(git -C "${RUNTIME_DIR}" rev-parse HEAD)"
   if [[ "${CURRENT_COMMIT}" != "${RUNTIME_COMMIT}" ]]; then
     if [[ "${ALLOW_UPDATE}" != "1" ]]; then

@@ -25,13 +25,13 @@ if (-not (Test-Path (Join-Path $RuntimeDir ".git"))) {
     git -C $RuntimeDir checkout --detach $RuntimeCommit
     if ($LASTEXITCODE -ne 0) { throw "Failed to select CosyVoice revision $RuntimeCommit." }
 } else {
+    $Dirty = git -C $RuntimeDir status --porcelain
+    if ($Dirty) { throw "CosyVoice runtime has local changes. Clean it before reinstalling." }
     $CurrentCommit = (git -C $RuntimeDir rev-parse HEAD).Trim()
     if ($CurrentCommit -ne $RuntimeCommit) {
         if (-not $AllowUpdate) {
             throw "CosyVoice runtime is at $CurrentCommit, expected $RuntimeCommit. Set COSYVOICE3_UPDATE=1 to explicitly switch the checkout."
         }
-        $Dirty = git -C $RuntimeDir status --porcelain
-        if ($Dirty) { throw "CosyVoice runtime has local changes. Clean it before COSYVOICE3_UPDATE=1." }
         git -C $RuntimeDir fetch --no-tags origin $RuntimeCommit
         if ($LASTEXITCODE -ne 0) { throw "Failed to fetch CosyVoice revision $RuntimeCommit." }
         git -C $RuntimeDir checkout --detach $RuntimeCommit

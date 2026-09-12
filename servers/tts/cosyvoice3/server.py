@@ -47,6 +47,11 @@ MAX_REF_AUDIO_SECONDS = float(os.getenv("COSYVOICE3_MAX_REF_AUDIO_SECONDS", "30"
 BEARER_TOKEN = os.getenv("COSYVOICE3_BEARER_TOKEN", "").strip()
 ALLOW_REMOTE_BIND = os.getenv("COSYVOICE3_ALLOW_REMOTE_BIND", "0").lower() in {"1", "true", "yes", "on"}
 
+if MAX_REF_AUDIO_BYTES <= 0:
+    raise ValueError("COSYVOICE3_MAX_REF_AUDIO_BYTES must be greater than zero.")
+if MAX_REF_AUDIO_SECONDS <= 0:
+    raise ValueError("COSYVOICE3_MAX_REF_AUDIO_SECONDS must be greater than zero.")
+
 SYSTEM_PROMPT = "You are a helpful assistant."
 END_OF_PROMPT = "<|endofprompt|>"
 
@@ -193,6 +198,8 @@ def decode_reference_audio(raw_base64: str, directory: str) -> str:
         raise HTTPException(status_code=400, detail="ref_audio must use WAV, FLAC, OGG, or AIFF audio.")
     if info.frames <= 0 or info.samplerate <= 0:
         raise HTTPException(status_code=400, detail="ref_audio must contain audio frames.")
+    if info.samplerate < 16000:
+        raise HTTPException(status_code=400, detail="ref_audio sample rate must be at least 16000 Hz.")
     if info.duration > MAX_REF_AUDIO_SECONDS:
         raise HTTPException(
             status_code=413,

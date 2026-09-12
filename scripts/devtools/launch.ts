@@ -139,7 +139,7 @@ const SIDECARS: Record<string, SidecarDef> = {
     displayName: "Qwen3-TTS",
     venvRelPath: "servers/tts/qwen3tts/.venv",
     scriptRelPath: "servers/tts/qwen3tts/server.py",
-    httpHealthUrl: `http://127.0.0.1:${process.env.QWEN3TTS_PORT ?? process.env.TOMORI_TTS_PORT ?? "8012"}/health`,
+    httpHealthUrl: `http://127.0.0.1:${process.env.TOMORI_TTS_PORT ?? (process.env.TOMORI_TTS_MODE === "voice-design" ? "8014" : "8012")}/health`,
     readyStatuses: ["ok", "idle"],
   },
 
@@ -148,7 +148,7 @@ const SIDECARS: Record<string, SidecarDef> = {
     displayName: "Chatterbox TTS",
     venvRelPath: "servers/tts/chatterbox/.venv",
     scriptRelPath: "servers/tts/chatterbox/server.py",
-    httpHealthUrl: `http://127.0.0.1:${process.env.CHATTERBOX_PORT ?? process.env.TOMORI_TTS_PORT ?? "8011"}/health`,
+    httpHealthUrl: `http://127.0.0.1:${process.env.TOMORI_TTS_PORT ?? "8011"}/health`,
   },
 
   irodoritts: {
@@ -156,7 +156,7 @@ const SIDECARS: Record<string, SidecarDef> = {
     displayName: "IrodoriTTS",
     venvRelPath: "servers/tts/irodoritts/.venv",
     scriptRelPath: "servers/tts/irodoritts/server.py",
-    httpHealthUrl: `http://127.0.0.1:${process.env.IRODORI_TTS_PORT ?? process.env.TOMORI_TTS_PORT ?? "8013"}/health`,
+    httpHealthUrl: `http://127.0.0.1:${process.env.TOMORI_TTS_PORT ?? "8013"}/health`,
   },
 
   cosyvoice3: {
