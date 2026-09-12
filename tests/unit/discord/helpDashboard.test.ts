@@ -11,10 +11,11 @@ import { HELP_PROVIDER_IDS } from "@/utils/discord/helpProviderGuides";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
 import {
   buildHelpDashboardPayload,
+  buildHelpStops,
   buildProviderGuideModal,
   resolveHelpSelection,
 } from "@/utils/discord/ui/helpDashboard";
-import { initializeLocalizer } from "@/utils/text/localizer";
+import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 
 beforeAll(async () => {
   await initializeLocalizer();
@@ -146,6 +147,111 @@ describe("help dashboard", () => {
       expect(modal.components.length).toBeGreaterThan(0);
       expect(modal.components.length).toBeLessThanOrEqual(5);
       expect(modal.components.every((component) => component.type === ComponentType.TextDisplay)).toBe(true);
+    }
+  });
+
+  it("renders the page header and subsection header when a variant is active", () => {
+    const pageTitle = localizer("en-US", "commands.help.speech.overview.title");
+    const variantTitle = localizer("en-US", "commands.help.speech.chatterbox.title");
+    expect(pageTitle).not.toBe(variantTitle);
+
+    const payload = buildHelpDashboardPayload("en-US", "features", "speech", "chatterbox");
+    const container = payload.components[0] as ContainerComponentData<ComponentInContainerData>;
+    const serialized = JSON.stringify(payload);
+
+    expect(serialized).toContain(pageTitle);
+    expect(serialized).toContain(variantTitle);
+
+    const variantHeading = container.components.find(
+      (comp) =>
+        comp.type === ComponentType.TextDisplay && "content" in comp && comp.content.startsWith(`### ${variantTitle}`),
+    );
+    expect(variantHeading).toBeDefined();
+  });
+
+  it("renders all page sections and footer when a page has no variants", () => {
+    const container = getContainer("en-US", "features", "personal-providers");
+    const serialized = JSON.stringify(container);
+
+    expect(serialized).toContain(localizer("en-US", "commands.help.personal-provider.setup_field"));
+    expect(serialized).toContain(localizer("en-US", "commands.help.personal-provider.behavior_field"));
+    expect(serialized).toContain(localizer("en-US", "commands.help.personal-provider.byok_field"));
+    expect(serialized).toContain(localizer("en-US", "commands.help.personal-provider.footer"));
+  });
+
+  it("derives the flattened stop count for each category from the catalog", () => {
+    for (const category of HELP_CATEGORIES) {
+      const stops = buildHelpStops(category);
+      const expectedCount = category.pages.reduce((sum, page) => sum + Math.max(1, page.variants?.length ?? 0), 0);
+      expect(stops).toHaveLength(expectedCount);
+    }
+  });
+
+  it("steps across the page boundary from the last custom-endpoints variant to the first speech variant", () => {
+    const featuresCategory = HELP_CATEGORIES.find((candidate) => candidate.id === "features");
+    const customEndpointsPage = featuresCategory?.pages.find((candidate) => candidate.id === "custom-endpoints");
+    const speechPage = featuresCategory?.pages.find((candidate) => candidate.id === "speech");
+
+    const lastCustomVariant = customEndpointsPage?.variants?.at(-1);
+    const firstSpeechVariant = speechPage?.variants?.[0];
+
+    if (!featuresCategory || !customEndpointsPage || !speechPage || !lastCustomVariant || !firstSpeechVariant) {
+      throw new Error("Missing expected features catalog entries");
+    }
+
+    const payload = buildHelpDashboardPayload(
+      "en-US",
+      featuresCategory.id,
+      customEndpointsPage.id,
+      lastCustomVariant.id,
+    );
+    const container = payload.components[0] as ContainerComponentData<ComponentInContainerData>;
+    const navRow = container.components.find(
+      (comp) =>
+        comp.type === ComponentType.ActionRow &&
+        "components" in comp &&
+        comp.components.some((child) => "customId" in child && child.customId?.startsWith("help:v2:navigate:")),
+    );
+    expect(navRow).toBeDefined();
+    const buttons = navRow && "components" in navRow ? navRow.components : [];
+    expect(buttons).toHaveLength(2);
+    const nextButton = buttons[1];
+    expect(nextButton?.disabled).toBe(false);
+
+    const expectedCustomId = `help:v2:navigate:en-US:${featuresCategory.id}:${speechPage.id}:${firstSpeechVariant.id}`;
+    expect(nextButton && "customId" in nextButton ? nextButton.customId : "").toBe(expectedCustomId);
+  });
+
+  it("disables the previous button on the first stop and the next button on the last stop", () => {
+    for (const category of HELP_CATEGORIES) {
+      const stops = buildHelpStops(category);
+      expect(stops.length).toBeGreaterThan(0);
+
+      const firstStop = stops[0];
+      const firstPayload = buildHelpDashboardPayload("en-US", category.id, firstStop?.pageId, firstStop?.variantId);
+      const firstContainer = firstPayload.components[0] as ContainerComponentData<ComponentInContainerData>;
+      const firstNavRow = firstContainer.components.find(
+        (comp) =>
+          comp.type === ComponentType.ActionRow &&
+          "components" in comp &&
+          comp.components.some((child) => "customId" in child && child.customId?.startsWith("help:v2:navigate:")),
+      );
+      expect(firstNavRow).toBeDefined();
+      const firstButtons = firstNavRow && "components" in firstNavRow ? firstNavRow.components : [];
+      expect(firstButtons[0]?.disabled).toBe(true);
+
+      const lastStop = stops[stops.length - 1];
+      const lastPayload = buildHelpDashboardPayload("en-US", category.id, lastStop?.pageId, lastStop?.variantId);
+      const lastContainer = lastPayload.components[0] as ContainerComponentData<ComponentInContainerData>;
+      const lastNavRow = lastContainer.components.find(
+        (comp) =>
+          comp.type === ComponentType.ActionRow &&
+          "components" in comp &&
+          comp.components.some((child) => "customId" in child && child.customId?.startsWith("help:v2:navigate:")),
+      );
+      expect(lastNavRow).toBeDefined();
+      const lastButtons = lastNavRow && "components" in lastNavRow ? lastNavRow.components : [];
+      expect(lastButtons[1]?.disabled).toBe(true);
     }
   });
 });

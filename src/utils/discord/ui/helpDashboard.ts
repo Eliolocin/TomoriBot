@@ -41,13 +41,31 @@ export const HELP_ROUTE_VERSION = "v2";
 export interface HelpSelection {
   category: HelpCategoryDefinition;
   page: HelpPageDefinition;
-  pageIndex: number;
   variant?: HelpVariantDefinition;
+}
+
+export interface HelpStop {
+  pageId: HelpPageId;
+  variantId?: string;
 }
 
 export interface HelpDashboardPayload {
   components: TopLevelComponentData[];
   flags: MessageFlags.IsComponentsV2;
+}
+
+export function buildHelpStops(category: HelpCategoryDefinition): HelpStop[] {
+  const stops: HelpStop[] = [];
+  for (const page of category.pages) {
+    if (page.variants && page.variants.length > 0) {
+      for (const variant of page.variants) {
+        stops.push({ pageId: page.id, variantId: variant.id });
+      }
+    } else {
+      stops.push({ pageId: page.id });
+    }
+  }
+  return stops;
 }
 
 export function buildHelpCustomId(...segments: string[]): string {
@@ -60,7 +78,6 @@ export function resolveHelpSelection(categoryId?: string, pageId?: string, varia
   return {
     category,
     page,
-    pageIndex: category.pages.findIndex((candidate) => candidate.id === page.id),
     variant: getHelpVariant(page, variantId),
   };
 }
@@ -105,26 +122,35 @@ function buildPageSelectRow(
 function buildNavigationRow(
   locale: string,
   category: HelpCategoryDefinition,
-  pageIndex: number,
+  stops: readonly HelpStop[],
+  stopIndex: number,
 ): ActionRowData<ButtonComponentData> {
-  const previousPage = category.pages[Math.max(0, pageIndex - 1)];
-  const nextPage = category.pages[Math.min(category.pages.length - 1, pageIndex + 1)];
+  const safeIndex = Math.max(0, Math.min(stops.length - 1, stopIndex));
+  const previousStop = stops[Math.max(0, safeIndex - 1)];
+  const nextStop = stops[Math.min(stops.length - 1, safeIndex + 1)];
+
+  const buildNavigateCustomId = (stop: HelpStop): string => {
+    return stop.variantId
+      ? buildHelpCustomId("navigate", locale, category.id, stop.pageId, stop.variantId)
+      : buildHelpCustomId("navigate", locale, category.id, stop.pageId);
+  };
+
   return {
     type: ComponentType.ActionRow,
     components: [
       {
         type: ComponentType.Button,
         style: ButtonStyle.Secondary,
-        customId: buildHelpCustomId("navigate", locale, category.id, previousPage.id),
+        customId: buildNavigateCustomId(previousStop),
         label: localizer(locale, "commands.help.dashboard.previous_button"),
-        disabled: pageIndex === 0,
+        disabled: safeIndex === 0,
       },
       {
         type: ComponentType.Button,
         style: ButtonStyle.Secondary,
-        customId: buildHelpCustomId("navigate", locale, category.id, nextPage.id),
+        customId: buildNavigateCustomId(nextStop),
         label: localizer(locale, "commands.help.dashboard.next_button"),
-        disabled: pageIndex === category.pages.length - 1,
+        disabled: safeIndex === stops.length - 1,
       },
     ],
   };
@@ -208,39 +234,62 @@ export function buildHelpDashboardPayload(
   pageId?: string,
   variantId?: string,
 ): HelpDashboardPayload {
-  const { category, page, pageIndex, variant } = resolveHelpSelection(categoryId, pageId, variantId);
-  const activeContent = variant ?? page.variants?.[0] ?? page;
-  const variables = activeContent.variables?.(locale) ?? {};
+  const { category, page, variant } = resolveHelpSelection(categoryId, pageId, variantId);
+  const activeVariant = variant ?? page.variants?.[0];
+  const pageVariables = page.variables?.(locale) ?? {};
   const content: ComponentInContainerData[] = [
     buildCategoryRow(locale, category.id),
     { type: ComponentType.Separator, divider: true, spacing: 1 },
   ];
 
-  if (activeContent.introTitleKey && activeContent.introDescriptionKey) {
+  if (page.introTitleKey && page.introDescriptionKey) {
     content.push({
       type: ComponentType.TextDisplay,
-      content: `## ${localizer(locale, activeContent.introTitleKey, variables)}\n${localizer(locale, activeContent.introDescriptionKey, variables)}`,
+      content: `## ${localizer(locale, page.introTitleKey, pageVariables)}\n${localizer(locale, page.introDescriptionKey, pageVariables)}`,
     });
   }
 
   content.push({
     type: ComponentType.TextDisplay,
-    content: `${"#".repeat(activeContent.titleHeadingLevel ?? 2)} ${localizer(locale, activeContent.titleKey, variables)}\n${localizer(locale, activeContent.descriptionKey, variables)}`,
+    content: `${"#".repeat(page.titleHeadingLevel ?? 2)} ${localizer(locale, page.titleKey, pageVariables)}\n${localizer(locale, page.descriptionKey, pageVariables)}`,
   });
 
-  for (const section of activeContent.sections) {
-    const sectionVariables = { ...variables, ...section.variables?.(locale) };
+  if (activeVariant) {
+    const variantVariables = { ...pageVariables, ...activeVariant.variables?.(locale) };
     content.push({
       type: ComponentType.TextDisplay,
-      content: `### ${localizer(locale, section.titleKey, sectionVariables)}\n${localizer(locale, section.bodyKey, sectionVariables)}`,
+      content: `### ${localizer(locale, activeVariant.titleKey, variantVariables)}\n${localizer(locale, activeVariant.descriptionKey, variantVariables)}`,
     });
-  }
 
-  if (activeContent.footerKey) {
-    content.push({
-      type: ComponentType.TextDisplay,
-      content: `-# ${localizer(locale, activeContent.footerKey, variables)}`,
-    });
+    for (const section of activeVariant.sections) {
+      const sectionVariables = { ...variantVariables, ...section.variables?.(locale) };
+      content.push({
+        type: ComponentType.TextDisplay,
+        content: `### ${localizer(locale, section.titleKey, sectionVariables)}\n${localizer(locale, section.bodyKey, sectionVariables)}`,
+      });
+    }
+
+    if (activeVariant.footerKey) {
+      content.push({
+        type: ComponentType.TextDisplay,
+        content: `-# ${localizer(locale, activeVariant.footerKey, variantVariables)}`,
+      });
+    }
+  } else {
+    for (const section of page.sections) {
+      const sectionVariables = { ...pageVariables, ...section.variables?.(locale) };
+      content.push({
+        type: ComponentType.TextDisplay,
+        content: `### ${localizer(locale, section.titleKey, sectionVariables)}\n${localizer(locale, section.bodyKey, sectionVariables)}`,
+      });
+    }
+
+    if (page.footerKey) {
+      content.push({
+        type: ComponentType.TextDisplay,
+        content: `-# ${localizer(locale, page.footerKey, pageVariables)}`,
+      });
+    }
   }
 
   if (page.showProviderPicker) {
@@ -248,20 +297,23 @@ export function buildHelpDashboardPayload(
     if (page.providerPickerFooterKey) {
       content.push({
         type: ComponentType.TextDisplay,
-        content: localizer(locale, page.providerPickerFooterKey, variables),
+        content: localizer(locale, page.providerPickerFooterKey, pageVariables),
       });
     }
   }
 
-  const variantSelect = buildVariantSelectRow(locale, category, page, variant?.id);
+  const variantSelect = buildVariantSelectRow(locale, category, page, activeVariant?.id);
   if (variantSelect) {
     content.push(variantSelect);
   }
 
+  const stops = buildHelpStops(category);
+  const currentStopIndex = stops.findIndex((stop) => stop.pageId === page.id && stop.variantId === activeVariant?.id);
+
   content.push(
     { type: ComponentType.Separator, divider: true, spacing: 1 },
     buildPageSelectRow(locale, category, page.id),
-    buildNavigationRow(locale, category, pageIndex),
+    buildNavigationRow(locale, category, stops, Math.max(0, currentStopIndex)),
   );
 
   const container: ContainerComponentData<ComponentInContainerData> = {
@@ -270,7 +322,7 @@ export function buildHelpDashboardPayload(
     components: content,
   };
   return {
-    components: [container, buildPersistentFooterRow(locale, activeContent.docsPath)],
+    components: [container, buildPersistentFooterRow(locale, activeVariant?.docsPath ?? page.docsPath)],
     flags: MessageFlags.IsComponentsV2,
   };
 }

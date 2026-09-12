@@ -94,10 +94,6 @@
       "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
     },
     {
-      "path": "teach",
-      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
-    },
-    {
       "path": "teach document",
       "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
     }

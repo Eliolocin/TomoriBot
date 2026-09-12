@@ -1,5 +1,16 @@
 import { beforeAll, describe, expect, it } from "bun:test";
-import type { ButtonInteraction, Client, ModalSubmitInteraction, StringSelectMenuInteraction } from "discord.js";
+import {
+  ComponentType,
+  type ActionRowData,
+  type ButtonInteraction,
+  type Client,
+  type ComponentInContainerData,
+  type ContainerComponentData,
+  type ModalSubmitInteraction,
+  type StringSelectMenuComponentData,
+  type StringSelectMenuInteraction,
+  type TopLevelComponentData,
+} from "discord.js";
 import { helpInteractionRoute } from "@/utils/discord/interactions/helpRoutes";
 import { initializeLocalizer } from "@/utils/text/localizer";
 
@@ -83,5 +94,63 @@ describe("help global interaction route", () => {
     });
 
     expect(calls).toEqual(["deferUpdate"]);
+  });
+
+  it("navigates to a specific subsection and marks it default in the select menu", async () => {
+    let capturedPayload: unknown;
+    const interaction = {
+      locale: "en-US",
+      guildLocale: "en-US",
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      update: async (nextPayload: unknown) => {
+        capturedPayload = nextPayload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await helpInteractionRoute.execute({} as Client, interaction, {
+      namespace: "help",
+      version: "v2",
+      segments: ["navigate", "en-US", "features", "speech", "chatterbox"],
+    });
+
+    expect(capturedPayload).toBeDefined();
+    const container = (capturedPayload as { components: TopLevelComponentData[] })
+      .components[0] as ContainerComponentData<ComponentInContainerData>;
+    const variantRow = container.components.find(
+      (comp) =>
+        comp.type === ComponentType.ActionRow &&
+        "components" in comp &&
+        comp.components.some(
+          (child) =>
+            child.type === ComponentType.StringSelect && "customId" in child && child.customId?.includes(":variant:"),
+        ),
+    ) as ActionRowData<StringSelectMenuComponentData> | undefined;
+
+    expect(variantRow).toBeDefined();
+    const selectMenu = variantRow?.components[0];
+    const chatterboxOption = selectMenu?.options.find((opt) => opt.value === "chatterbox");
+    expect(chatterboxOption).toBeDefined();
+    expect(chatterboxOption?.default).toBe(true);
+  });
+
+  it("throws when navigate targets a nonexistent subsection", async () => {
+    const interaction = {
+      locale: "en-US",
+      guildLocale: "en-US",
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      update: async () => {},
+    } as unknown as ButtonInteraction;
+
+    await expect(
+      helpInteractionRoute.execute({} as Client, interaction, {
+        namespace: "help",
+        version: "v2",
+        segments: ["navigate", "en-US", "features", "speech", "nonexistent-variant"],
+      }),
+    ).rejects.toThrow("Invalid help navigation target");
   });
 });

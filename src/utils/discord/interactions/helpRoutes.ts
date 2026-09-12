@@ -18,7 +18,7 @@ export const helpInteractionRoute: GlobalInteractionRoute = {
   namespace: HELP_ROUTE_NAMESPACE,
   version: HELP_ROUTE_VERSION,
   async execute(_client, interaction, route): Promise<void> {
-    const [action, routeLocale, firstValue, secondValue] = route.segments;
+    const [action, routeLocale, firstValue, secondValue, thirdValue] = route.segments;
     const locale =
       routeLocale && getSupportedLocales().includes(routeLocale)
         ? routeLocale
@@ -38,13 +38,18 @@ export const helpInteractionRoute: GlobalInteractionRoute = {
     }
 
     if (action === "navigate" && firstValue && secondValue && interaction.isButton()) {
-      const selection = resolveHelpSelection(firstValue, secondValue);
-      if (selection.category.id !== firstValue || selection.page.id !== secondValue) {
-        throw new Error(`Invalid help navigation target: ${firstValue}:${secondValue}`);
+      const selection = resolveHelpSelection(firstValue, secondValue, thirdValue);
+      if (
+        selection.category.id !== firstValue ||
+        selection.page.id !== secondValue ||
+        (thirdValue && !selection.variant)
+      ) {
+        const routeTarget = thirdValue ? `${firstValue}:${secondValue}:${thirdValue}` : `${firstValue}:${secondValue}`;
+        throw new Error(`Invalid help navigation target: ${routeTarget}`);
       }
       await deliverGuardedPanel(
         interaction,
-        buildHelpDashboardPayload(locale, selection.category.id, selection.page.id),
+        buildHelpDashboardPayload(locale, selection.category.id, selection.page.id, selection.variant?.id),
         { method: "update", locale },
       );
       return;
