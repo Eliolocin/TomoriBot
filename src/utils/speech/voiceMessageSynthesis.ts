@@ -197,8 +197,11 @@ export async function synthesizeVoiceMessage(
   return {
     success: result.success,
     audioBuffer: result.audioBuffer,
-    contentType,
-    extension: resolveExtensionFromContentType(contentType),
-    cleanedCaptionText: captionText,
+    contentType: result.contentType,
+    extension: result.extension,
+    cleanedCaptionText: result.cleanedCaptionText,
+    errorKind: result.errorKind,
+    details: result.details || "Failed to generate the ElevenLabs voice message.",
+    backendKey: "elevenlabs",
   };
 }
